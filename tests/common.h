@@ -4,7 +4,10 @@
 
 
 #include "Bested.h"
+
+#define RUNTIME_REFLECTION_IMPLEMENTATION
 #include "../Runtime_Reflection.h"
+
 #include "TEST_MA.h"
 
 
