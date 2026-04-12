@@ -37,9 +37,9 @@ void test_all_basic_c_types(void) {
 
     {
         Runtime_Reflection_Type *basic_types_struct_type = Begin_New_Type(Basic_Types_Struct);
-        basic_types_struct_type->kind = RRTK_Struct;
+        basic_types_struct_type->kind = RRTK_struct;
 
-        TEST_EXPECT_EQ(basic_types_struct_type->size,      sizeof(Basic_Types_Struct));
+        TEST_EXPECT_EQ(basic_types_struct_type->size_in_bytes,      sizeof(Basic_Types_Struct));
         TEST_EXPECT_EQ(basic_types_struct_type->alignment, Alignof(Basic_Types_Struct));
 
         Add_Field(basic_types_struct_type, Basic_Types_Struct, u8,  a_u8);
@@ -86,51 +86,72 @@ void test_all_basic_c_types(void) {
     const char *expected = "(Basic_Types_Struct){ .a_u8 = 1, .a_s8 = 2, .a_u16 = 3, .a_s16 = 4, .a_u32 = 5, .a_s32 = 6, .a_u64 = 7, .a_s64 = 8, .a_f32 = 9.000000, .a_f64 = 10.000000, .a_bool = true, .c_str = \"12\", .void_ptr = NULL }";
 
     TEST_EXPECT_WITH_REASON(String_Eq(basic_types_struct_string, S(expected)), "wanted \""S_Fmt"\", got \""S_Fmt"\"", S_Arg(S(expected)), S_Arg(basic_types_struct_string));
+
+
+    // serialization test
+    String_Builder sb = ZEROED;
+    Generic_serialize_human_readable(&sb, Basic_Types_Struct, &basic_types_struct);
+
+    String sb_string = String_Builder_To_String(&sb);
+    Basic_Types_Struct deserialized = ZEROED;
+    Generic_deserialize_human_readable(sb_string, Basic_Types_Struct, &deserialized);
+
+    // TODO make this a string, String_Eq() them to debug.
+    TEST_EXPECT(Mem_Eq(&basic_types_struct, &deserialized, sizeof(Basic_Types_Struct)));
 }
 
 
 void test_dumb_and_stupid_c_types(void) {
+
+    // X(Type, name)
+    //
+    // X(bool, a_bool) // i would never lump you in with these guys bool, your better than that.
+    #define TEST_DUMB_C_TYPES_X_MACRO                       \
+        X(char                  , a_char                 )  \
+        X(signed char           , a_signed_char          )  \
+        X(unsigned char         , a_unsigned_char        )  \
+                                                            \
+        X(short                 , a_short                )  \
+        X(short int             , a_short_int            )  \
+        X(signed short          , a_signed_short         )  \
+        X(signed short int      , a_signed_short_int     )  \
+                                                            \
+        X(unsigned short        , a_unsigned_short       )  \
+        X(unsigned short int    , a_unsigned_short_int   )  \
+                                                            \
+        X(int                   , a_int                  )  \
+        X(signed                , a_signed               )  \
+        X(signed int            , a_signed_int           )  \
+                                                            \
+        X(unsigned              , a_unsigned             )  \
+        X(unsigned int          , a_unsigned_int         )  \
+                                                            \
+        X(long                  , a_long                 )  \
+        X(long int              , a_long_int             )  \
+        X(signed long           , a_signed_long          )  \
+        X(signed long int       , a_signed_long_int      )  \
+                                                            \
+        X(unsigned long         , a_unsigned_long        )  \
+        X(unsigned long int     , a_unsigned_long_int    )  \
+                                                            \
+        X(long long             , a_long_long            )  \
+        X(long long int         , a_long_long_int        )  \
+        X(signed long long      , a_signed_long_long     )  \
+        X(signed long long int  , a_signed_long_long_int )  \
+                                                            \
+        X(unsigned long long    , a_unsigned_long_long   )  \
+        X(unsigned long long int, a_unsigned_long_long_in)  \
+                                                            \
+        X(float                 , a_float                )  \
+        X(double                , a_double               )  \
+        X(long double           , a_long_double          )
+
+
     typedef struct {
-        // bool a_bool; // i would never lump you in with these guys bool, your better than that.
 
-        char                    a_char;
-        signed char             a_signed_char;
-        unsigned char           a_unsigned_char;
-
-        short                   a_short;
-        short int               a_short_int;
-        signed short            a_signed_short;
-        signed short int        a_signed_short_int;
-
-        unsigned short          a_unsigned_short;
-        unsigned short int      a_unsigned_short_int;
-
-        int                     a_int;
-        signed                  a_signed;
-        signed int              a_signed_int;
-
-        unsigned                a_unsigned;
-        unsigned int            a_unsigned_int;
-
-        long                    a_long;
-        long int                a_long_int;
-        signed long             a_signed_long;
-        signed long int         a_signed_long_int;
-
-        unsigned long           a_unsigned_long;
-        unsigned long int       a_unsigned_long_int;
-
-        long long               a_long_long;
-        long long int           a_long_long_int;
-        signed long long        a_signed_long_long;
-        signed long long int    a_signed_long_long_int;
-
-        unsigned long long      a_unsigned_long_long;
-        unsigned long long int  a_unsigned_long_long_in;
-
-        float                   a_float;
-        double                  a_double;
-        long double             a_long_double;
+        #define X(Type, name) Type name;
+            TEST_DUMB_C_TYPES_X_MACRO
+        #undef X
 
         // maybe these go here as well?
         // const char *;
@@ -139,46 +160,12 @@ void test_dumb_and_stupid_c_types(void) {
 
     {
         Runtime_Reflection_Type *dumb_c_types_type = Begin_New_Type(Dumb_C_Types);
-        dumb_c_types_type->kind = RRTK_Struct;
+        dumb_c_types_type->kind = RRTK_struct;
 
-        Add_Field(dumb_c_types_type, Dumb_C_Types, char                  , a_char);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, signed char           , a_signed_char);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, unsigned char         , a_unsigned_char);
 
-        Add_Field(dumb_c_types_type, Dumb_C_Types, short                 , a_short);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, short int             , a_short_int);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, signed short          , a_signed_short);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, signed short int      , a_signed_short_int);
-
-        Add_Field(dumb_c_types_type, Dumb_C_Types, unsigned short        , a_unsigned_short);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, unsigned short int    , a_unsigned_short_int);
-
-        Add_Field(dumb_c_types_type, Dumb_C_Types, int                   , a_int);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, signed                , a_signed);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, signed int            , a_signed_int);
-
-        Add_Field(dumb_c_types_type, Dumb_C_Types, unsigned              , a_unsigned);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, unsigned int          , a_unsigned_int);
-
-        Add_Field(dumb_c_types_type, Dumb_C_Types, long                  , a_long);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, long int              , a_long_int);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, signed long           , a_signed_long);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, signed long int       , a_signed_long_int);
-
-        Add_Field(dumb_c_types_type, Dumb_C_Types, unsigned long         , a_unsigned_long);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, unsigned long int     , a_unsigned_long_int);
-
-        Add_Field(dumb_c_types_type, Dumb_C_Types, long long             , a_long_long);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, long long int         , a_long_long_int);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, signed long long      , a_signed_long_long);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, signed long long int  , a_signed_long_long_int);
-
-        Add_Field(dumb_c_types_type, Dumb_C_Types, unsigned long long    , a_unsigned_long_long);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, unsigned long long int, a_unsigned_long_long_in);
-
-        Add_Field(dumb_c_types_type, Dumb_C_Types, float                 , a_float);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, double                , a_double);
-        Add_Field(dumb_c_types_type, Dumb_C_Types, long double           , a_long_double);
+        #define X(Type, name) Add_Field(dumb_c_types_type, Dumb_C_Types, Type, name);
+            TEST_DUMB_C_TYPES_X_MACRO
+        #undef X
 
         // TODO maybe TEST_MA needs a TEST_SUCCESS() function
         TEST_EXPECT(true && "successfully loaded all fields");
@@ -189,51 +176,107 @@ void test_dumb_and_stupid_c_types(void) {
         // make sure the c types are the right size.
         Runtime_Reflection_Type *dumb_c_types_type = Reflect(Dumb_C_Types);
 
-        #define DUMB_C_TYPES_X_MACRO    \
-            X(char                  )   \
-            X(signed char           )   \
-            X(unsigned char         )   \
-            X(short                 )   \
-            X(short int             )   \
-            X(signed short          )   \
-            X(signed short int      )   \
-            X(unsigned short        )   \
-            X(unsigned short int    )   \
-            X(int                   )   \
-            X(signed                )   \
-            X(signed int            )   \
-            X(unsigned              )   \
-            X(unsigned int          )   \
-            X(long                  )   \
-            X(long int              )   \
-            X(signed long           )   \
-            X(signed long int       )   \
-            X(unsigned long         )   \
-            X(unsigned long int     )   \
-            X(long long             )   \
-            X(long long int         )   \
-            X(signed long long      )   \
-            X(signed long long int  )   \
-            X(unsigned long long    )   \
-            X(unsigned long long int)   \
-            X(float                 )   \
-            X(double                )   \
-            X(long double           )
-
-        u64 index = 0;
-
-        #define X(Type)         \
+        #define X(Type, name)   \
             {                   \
-                TEST_EXPECT_EQ(Reflect(Type)->size, sizeof(Type));                                  \
-                TEST_EXPECT_EQ(dumb_c_types_type->fields.items[index].type->size, sizeof(Type));    \
-                index += 1;     \
+                if (Reflect(Type)->size_in_bytes != sizeof(Type)) TEST_EXPECT_EQ(Reflect(Type)->size_in_bytes, sizeof(Type));                                         \
+                if (Get_Field_By_Name(dumb_c_types_type, S(#name))->type->size_in_bytes != sizeof(Type)) TEST_EXPECT_EQ(Get_Field_By_Name(dumb_c_types_type, S(#name))->type->size_in_bytes, sizeof(Type));  \
+                TEST_EXPECT_WITH_REASON(true, #Type " passed test");    \
             }
-            DUMB_C_TYPES_X_MACRO
+            TEST_DUMB_C_TYPES_X_MACRO
         #undef X
     }
+
+    Dumb_C_Types dumb_c_types = {
+        #define X(Type, name) .name = strlen(#Type),
+            TEST_DUMB_C_TYPES_X_MACRO
+        #undef X
+    };
+
+    String result = Generic_sprint(Dumb_C_Types, &dumb_c_types);
+    TEST_EXPECT_EQ(result.length, 644);
+
+
+    // serialization test
+    String_Builder sb = ZEROED;
+    Generic_serialize_human_readable(&sb, Dumb_C_Types, &dumb_c_types);
+
+    String sb_string = String_Builder_To_String(&sb);
+    Dumb_C_Types deserialized = ZEROED;
+    Generic_deserialize_human_readable(sb_string, Dumb_C_Types, &deserialized);
+
+    // TODO make this a string, String_Eq() them to debug.
+    TEST_EXPECT(Mem_Eq(&dumb_c_types, &deserialized, sizeof(Dumb_C_Types)));
 }
 
 void test_advanced_types(void) {
-    TEST_FAIL("TODO: test_advanced_types");
+    typedef struct {
+        s32 bar;
+        f64 baz;
+        bool rip_struct_packing;
+    } Foo;
+
+    Runtime_Reflection_Type *foo_type = Begin_New_Type(Foo);
+    Add_Field(foo_type, Foo, s32,  bar);
+    Add_Field(foo_type, Foo, s64,  baz);
+    Add_Field(foo_type, Foo, bool, rip_struct_packing);
+
+
+    typedef Array(Foo) Foo_Array;
+
+    Make_New_Array_Type(Foo_Array, Foo);
+
+
+    #define N 6
+
+    typedef struct {
+        // probably have this in basic_types?
+        String my_string;
+
+        Int_Array int_array;
+
+        Foo_Array foo_array;
+
+        u64 *pointer_to_unsigned;
+        Foo *pointer_to_foo;
+
+        s32 buffer_10[10];
+        s32 buffer_N[N];
+
+        // unions?
+        // tagged unions?
+    } Advanced_Types;
+
+
+    Runtime_Reflection_Type *advanced_types_type = Begin_New_Type(Advanced_Types);
+
+    Add_Field(advanced_types_type, Advanced_Types, String,      my_string);
+    Add_Field(advanced_types_type, Advanced_Types, Int_Array,   int_array);
+    Add_Field(advanced_types_type, Advanced_Types, Foo_Array,   foo_array);
+
+    // pointers can probably be handled by this call
+    Add_Field(advanced_types_type, Advanced_Types, u64 *,       pointer_to_unsigned);
+    Add_Field(advanced_types_type, Advanced_Types, Foo *,       pointer_to_foo);
+
+    // could these be done with just this call?
+    Add_Field(advanced_types_type, Advanced_Types, s32 [10],    buffer_10);
+    // this one might be super tricky, we want the type to be s32 [6]
+    Add_Field(advanced_types_type, Advanced_Types, s32 [N],     buffer_N);
+
+
+    // TODO put stuff in these fields
+    Advanced_Types advanced_types = ZEROED;
+
+    // serialization test
+    String_Builder sb = ZEROED;
+    Generic_serialize_human_readable(&sb, Advanced_Types, &advanced_types);
+
+    String sb_string = String_Builder_To_String(&sb);
+    Advanced_Types deserialized = ZEROED;
+    Generic_deserialize_human_readable(sb_string, Advanced_Types, &deserialized);
+
+    // TODO make this a string, String_Eq() them to debug.
+    //
+    // TODO Mem_Eq wont work, need Generic_Deep_Equal()
+    TEST_EXPECT(Generic_deep_equal(Advanced_Types, &advanced_types, &deserialized));
 }
 

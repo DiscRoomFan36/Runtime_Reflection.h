@@ -17,7 +17,7 @@ void Generate_Person_Runtime_Reflection_Type_Info(void) {
     static_assert(sizeof(Person) == 32, "update when struct changes");
 
     Runtime_Reflection_Type *person_type = Begin_New_Type(Person);
-    person_type->kind = RRTK_Struct;
+    person_type->kind = RRTK_struct;
 
     Add_Field(person_type, Person, s32,  age);
     Add_Field(person_type, Person, f64,  height);
