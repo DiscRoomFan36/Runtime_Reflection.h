@@ -10,6 +10,8 @@ void test_advanced_types(void) {
     } Foo;
 
     Runtime_Reflection_Type *foo_type = Begin_New_Type(Foo);
+    foo_type->kind = RRTK_struct;
+
     Add_Field(foo_type, Foo, s32,  bar);
     Add_Field(foo_type, Foo, s64,  baz);
     Add_Field(foo_type, Foo, bool, rip_struct_packing);

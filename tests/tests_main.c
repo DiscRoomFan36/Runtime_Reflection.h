@@ -6,8 +6,7 @@
 #include "advanced_type_tests.c"
 #include "misc_api_tests.c"
 
-// TODO
-// #include "serialzation_tests.c"
+#include "serialization_tests.c"
 
 
 int main(void) {
@@ -15,12 +14,28 @@ int main(void) {
     Initialize_Runtime_Reflection(&runtime_reflection_arena);
 
     { // basic tests
-        ADD_TEST(test_all_basic_c_types,       .custom_name = "All Basic C Types");
+        ADD_TEST(test_common_c_types,       .custom_name = "All Basic C Types");
         ADD_TEST(test_dumb_and_stupid_c_types, .custom_name = "Dumb & Stupid C Types");
+
+        // this test will fail.
+        ADD_TEST(test_long_double_type, .custom_name = "Long Double Type");
     }
 
     { // advanced tests
         ADD_TEST(test_advanced_types,          .custom_name = "Advanced Types");
+    }
+
+    { // Serialization and Deserialization
+        { // binary serialization
+            ADD_TEST(test_binary_serialization_works_for_simple_packed_structures);
+            ADD_TEST(test_binary_serialization_works_for_structs_with_padding);
+            ADD_TEST(test_basic_types_binary_serialization);
+
+            ADD_TEST(test_binary_serialization_works_with_non_structs);
+            ADD_TEST(test_binary_serialization_fails_on_bad_inputs);
+        }
+
+        ADD_TEST(test_human_readable_serialization);
     }
 
 

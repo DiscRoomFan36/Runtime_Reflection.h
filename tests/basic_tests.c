@@ -2,52 +2,23 @@
 #include "common.h"
 
 
-void test_all_basic_c_types(void) {
+void test_common_c_types(void) {
     typedef struct {
-        // integers
-        u8   a_u8;
-        s8   a_s8;
-        u16  a_u16;
-        s16  a_s16;
-        u32  a_u32;
-        s32  a_s32;
-        u64  a_u64;
-        s64  a_s64;
-
-        f32  a_f32;
-        f64  a_f64;
-
-        bool a_bool;
-
-        const char *c_str;
-
-        void *void_ptr;
+        #define X(Type, name) Type a_ ## name;
+            COMMON_TYPES
+        #undef X
     } Basic_Types_Struct;
 
     {
         Runtime_Reflection_Type *basic_types_struct_type = Begin_New_Type(Basic_Types_Struct);
         basic_types_struct_type->kind = RRTK_struct;
 
-        TEST_EXPECT_EQ(basic_types_struct_type->size_in_bytes,      sizeof(Basic_Types_Struct));
-        TEST_EXPECT_EQ(basic_types_struct_type->alignment, Alignof(Basic_Types_Struct));
+        TEST_EXPECT_EQ(basic_types_struct_type->size_in_bytes, sizeof(Basic_Types_Struct));
+        TEST_EXPECT_EQ(basic_types_struct_type->alignment,     Alignof(Basic_Types_Struct));
 
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, u8,  a_u8);
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, s8,  a_s8);
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, u16, a_u16);
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, s16, a_s16);
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, u32, a_u32);
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, s32, a_s32);
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, u64, a_u64);
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, s64, a_s64);
-
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, f32, a_f32);
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, f64, a_f64);
-
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, bool, a_bool);
-
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, const char *, c_str);
-
-        Add_Field(basic_types_struct_type, Basic_Types_Struct, void *, void_ptr);
+        #define X(Type, name)  Add_Field(basic_types_struct_type, Basic_Types_Struct, Type, a_ ## name);
+            COMMON_TYPES
+        #undef X
 
         // TODO maybe TEST_MA needs a TEST_SUCCESS() function
         TEST_EXPECT(true && "successfully loaded all fields");
@@ -66,27 +37,16 @@ void test_all_basic_c_types(void) {
         .a_f32      =  9,
         .a_f64      = 10,
         .a_bool     = true,
-        .c_str      = "12",
-        .void_ptr   = NULL,
-};
+        .a_c_str      = "12",
+        .a_void_ptr   = NULL,
+    };
 
+    // this is just testing to see if this works with all basic types.
     String basic_types_struct_string = Generic_sprint(Basic_Types_Struct, &basic_types_struct);
 
-    const char *expected = "(Basic_Types_Struct){ .a_u8 = 1, .a_s8 = 2, .a_u16 = 3, .a_s16 = 4, .a_u32 = 5, .a_s32 = 6, .a_u64 = 7, .a_s64 = 8, .a_f32 = 9.000000, .a_f64 = 10.000000, .a_bool = true, .c_str = \"12\", .void_ptr = NULL }";
+    const char *expected = "(Basic_Types_Struct){ .a_u8 = 1, .a_s8 = 2, .a_u16 = 3, .a_s16 = 4, .a_u32 = 5, .a_s32 = 6, .a_u64 = 7, .a_s64 = 8, .a_f32 = 9.000000, .a_f64 = 10.000000, .a_bool = true, .a_c_str = \"12\", .a_void_ptr = NULL }";
 
     TEST_EXPECT_WITH_REASON(String_Eq(basic_types_struct_string, S(expected)), "wanted \""S_Fmt"\", got \""S_Fmt"\"", S_Arg(S(expected)), S_Arg(basic_types_struct_string));
-
-
-    // serialization test
-    String_Builder sb = ZEROED;
-    Generic_serialize_human_readable(&sb, Basic_Types_Struct, &basic_types_struct);
-
-    String sb_string = String_Builder_To_String(&sb);
-    Basic_Types_Struct deserialized = ZEROED;
-    Generic_deserialize_human_readable(sb_string, Basic_Types_Struct, &deserialized);
-
-    // TODO make this a string, String_Eq() them to debug.
-    TEST_EXPECT(Mem_Eq(&basic_types_struct, &deserialized, sizeof(Basic_Types_Struct)));
 }
 
 
@@ -133,7 +93,7 @@ void test_dumb_and_stupid_c_types(void) {
                                                             \
         X(float                 , a_float                )  \
         X(double                , a_double               )  \
-        X(long double           , a_long_double          )
+        X(long double, a_long_double) // this thing sucks, i have half a mind to just ban it.
 
 
     typedef struct {
@@ -175,24 +135,40 @@ void test_dumb_and_stupid_c_types(void) {
         #undef X
     }
 
-    Dumb_C_Types dumb_c_types = {
-        #define X(Type, name) .name = strlen(#Type),
+    { // generic print test.
+        Dumb_C_Types dumb_c_types = {
+            #define X(Type, name) .name = strlen(#Type),
             TEST_DUMB_C_TYPES_X_MACRO
-        #undef X
-    };
+            #undef X
+        };
 
-    String result = Generic_sprint(Dumb_C_Types, &dumb_c_types);
-    TEST_EXPECT_EQ(result.length, 644);
+        String result = Generic_sprint(Dumb_C_Types, &dumb_c_types);
+        TEST_EXPECT_EQ(result.length, 644);
+    }
+}
 
 
-    // serialization test
-    String_Builder sb = ZEROED;
-    Generic_serialize_human_readable(&sb, Dumb_C_Types, &dumb_c_types);
+void test_long_double_type(void) {
+    { // this sounds reasonable, but is it?
+        long double x = 235;
+        f64 float_result = Type_As_Float(Reflect(long double), &x);
+        printf("long double: %f\n", float_result);
+    }
 
-    String sb_string = String_Builder_To_String(&sb);
-    Dumb_C_Types deserialized = ZEROED;
-    Generic_deserialize_human_readable(sb_string, Dumb_C_Types, &deserialized);
+    typedef struct {
+        long double a_long_double;
+    } Long_Double_Struct;
 
-    // TODO make this a string, String_Eq() them to debug.
-    TEST_EXPECT(Mem_Eq(&dumb_c_types, &deserialized, sizeof(Dumb_C_Types)));
+    {
+        Runtime_Reflection_Type *Long_Double_Struct_type = Begin_New_Type(Long_Double_Struct);
+        Long_Double_Struct_type->kind = RRTK_struct;
+
+        Add_Field(Long_Double_Struct_type, Long_Double_Struct, long double, a_long_double);
+    }
+
+    Long_Double_Struct ld_stuct = { .a_long_double = 31 };
+    { // print test
+        String result = Generic_sprint(Long_Double_Struct, &ld_stuct);
+        printf("Long_Double_Struct: "S_Fmt"\n", S_Arg(result));
+    }
 }
