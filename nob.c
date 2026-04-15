@@ -164,6 +164,7 @@ void cmd_c_flags(void) {
     cmd_append(&cmd, "-Wno-initializer-overrides");
     cmd_append(&cmd, "-Wimplicit-fallthrough");
     cmd_append(&cmd, "-Wswitch-enum");
+    cmd_append(&cmd, "-Werror=switch-enum"); // important that the reflection stuff handles all cases.
     // cmd_append(&cmd, "-Weverything");
 
     cmd_append(&cmd, "-I"THIRDPARTY_FOLDER);

@@ -22,7 +22,7 @@ void test_common_c_types(void) {
 
         // TODO maybe TEST_MA needs a TEST_SUCCESS() function
         TEST_EXPECT(true && "successfully loaded all fields");
-        TEST_EXPECT_EQ(basic_types_struct_type->fields.count, 13);
+        TEST_EXPECT_EQ(basic_types_struct_type->fields.count, 14);
     }
 
     Basic_Types_Struct basic_types_struct = {
@@ -37,14 +37,15 @@ void test_common_c_types(void) {
         .a_f32      =  9,
         .a_f64      = 10,
         .a_bool     = true,
-        .a_c_str      = "12",
-        .a_void_ptr   = NULL,
+        .a_string   = S("the cool string."),
+        .a_c_str    = "12",
+        .a_void_ptr = NULL,
     };
 
     // this is just testing to see if this works with all basic types.
     String basic_types_struct_string = Generic_sprint(Basic_Types_Struct, &basic_types_struct);
 
-    const char *expected = "(Basic_Types_Struct){ .a_u8 = 1, .a_s8 = 2, .a_u16 = 3, .a_s16 = 4, .a_u32 = 5, .a_s32 = 6, .a_u64 = 7, .a_s64 = 8, .a_f32 = 9.000000, .a_f64 = 10.000000, .a_bool = true, .a_c_str = \"12\", .a_void_ptr = NULL }";
+    const char *expected = "(Basic_Types_Struct){ .a_u8 = 1, .a_s8 = 2, .a_u16 = 3, .a_s16 = 4, .a_u32 = 5, .a_s32 = 6, .a_u64 = 7, .a_s64 = 8, .a_f32 = 9.000000, .a_f64 = 10.000000, .a_bool = true, .a_string = \"the cool string.\", .a_c_str = \"12\", .a_void_ptr = NULL }";
 
     TEST_EXPECT_WITH_REASON(String_Eq(basic_types_struct_string, S(expected)), "wanted \""S_Fmt"\", got \""S_Fmt"\"", S_Arg(S(expected)), S_Arg(basic_types_struct_string));
 }

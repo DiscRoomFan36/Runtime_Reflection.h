@@ -70,8 +70,5 @@ void test_advanced_types(void) {
     Advanced_Types deserialized = ZEROED;
     Generic_deserialize_human_readable(sb_string, Advanced_Types, &deserialized);
 
-    // TODO make this a string, String_Eq() them to debug.
-    //
-    // TODO Mem_Eq wont work, need Generic_Deep_Equal()
     TEST_EXPECT(Generic_deep_equal(Advanced_Types, &advanced_types, &deserialized));
 }

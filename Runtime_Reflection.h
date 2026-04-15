@@ -4,9 +4,9 @@
 // Author   - Fletcher M
 //
 // Created  - 11/04/26
-// Modified - 14/04/26
+// Modified - 15/04/26
 //
-// Version  - v0.0.4
+// Version  - v0.0.5
 //
 // Make sure to...
 //      #define RUNTIME_REFLECTION_IMPLEMENTATION
@@ -29,29 +29,35 @@ typedef enum {
     RRTK_NULL = 0,
 
     // number is all integers and floats, of every size.
+    //
+    // use is_integer, is_signed_integer, and size_in_bytes to determine the exact type of number.
+    //
+    // Type_To_Float(), Type_To_Signed_Int(), Type_To_Unsigned_Int() functions work with numbers.
     RRTK_number,
-
-    // would the API be better if we separated integer and float?
-    // RRTK_Integer,
-    // RRTK_Float,
 
     RRTK_bool,
 
+    // corresponds to the type 'String' defined in Bested.h.
+    // you should prefer using this for strings, or even buffers of data,
+    RRTK_string,
     // kinda have to support this, but highly recommend String type.
     RRTK_c_str,
-    // this is only for void pointer
-    RRTK_void_pointer,
 
-    // type struct should have a "pointer to this type" in them.
-    // RRTK_pointer,
+
+    // this is only for void pointer, the type
+    // system has no idea what to do with this thing,
+    //
+    // when serialized, will just put the raw number.
+    RRTK_void_pointer,
 
     RRTK_struct,
 
-    // TODO String
-    // RRDK_String,
 
+    // type struct should have a "pointer to this type" in them.
+    // RRTK_pointer,
     // TODO pointer to things, maybe store the item? or just warn user that we dont do that.
     // or user decides weather to store item or something else, an index into other array?
+
 
     // TODO Array of things, store entire array.
     // TODO buffer of things, or maybe just the array?
@@ -82,7 +88,8 @@ typedef Array(Runtime_Reflection_Field) Runtime_Reflection_Field_Array;
 struct Runtime_Reflection_Type {
     Runtime_Reflection_Type_Kind kind;
 
-    String type_name;
+    // the name of the type.
+    String name;
     // u64 type_id;
 
     // preallocate the space you need with this.
@@ -181,6 +188,20 @@ typedef struct {
 String Generic_sprint_by_type(Runtime_Reflection_Type *type, void *value_ptr, Generic_sprint_Opt options);
 
 
+
+//
+// Generic binary format serialization and deserialization.
+// slap this baby straight into a file and be done with it.
+//
+#define Generic_binary_format_serialize(sb, Type, value_ptr)    Generic_binary_format_serialize_by_type((sb), Reflect(Type), (value_ptr))
+void Generic_binary_format_serialize_by_type(String_Builder *sb, Runtime_Reflection_Type *type, void *value_ptr);
+
+// TODO accept an allocator.
+#define Generic_binary_format_deserialize(input, Type, output)    Generic_binary_format_deserialize_by_type((input), Reflect(Type), (output))
+const char *Generic_binary_format_deserialize_by_type(String input, Runtime_Reflection_Type *type, void *output);
+
+
+
 // serialize type into human readable format.
 //
 // accepts a string builder to put data into,
@@ -205,25 +226,27 @@ typedef struct {
 const char *Generic_deserialize_human_readable_by_type(String input_data, Runtime_Reflection_Type *type, void *output, Generic_deserialize_human_readable_Options options);
 
 
-//
-// Generic binary format serialization and deserialization.
-// slap this baby straight into a file and be done with it.
-//
-#define Generic_binary_format_serialize(sb, Type, value_ptr)    Generic_binary_format_serialize_by_type((sb), Reflect(Type), (value_ptr))
-void Generic_binary_format_serialize_by_type(String_Builder *sb, Runtime_Reflection_Type *type, void *value_ptr);
-
-#define Generic_binary_format_deserialize(input, Type, output)    Generic_binary_format_deserialize_by_type((input), Reflect(Type), (output))
-const char *Generic_binary_format_deserialize_by_type(String input, Runtime_Reflection_Type *type, void *output);
-
-
 
 // checks if 2 things are equal, using their type info to check
-// stuff like the real value of stuff at pointers
+// stuff like the real value of stuff at pointers and strings.
+//
+// will ignore all data in struct padding sections, or any
+// struct fields not registered in the type system.
 #define Generic_deep_equal(Type, a_ptr, b_ptr) (false && "TODO: Generic_deep_equal")
+bool Generic_deep_equal_by_type(Runtime_Reflection_Type *type, void *a, void *b);
 
 
 
-// internal stuff
+// TODO functions to make:
+//     - separate binary serialization into packed and versioned versions.
+//     - make C-Struct String to type, want to make a metaprogram
+//       that scans a c file and makes the generate functions automatically.
+
+
+
+// internal stuff, use the macro versions of this stuff
+//
+// TODO maybe expose this to the user, so they can make types that dont exist?
 Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_bytes, u64 alignment);
 void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_name, String field_name, u64 offset);
 
@@ -259,6 +282,7 @@ internal const char *RRTK_to_string(Runtime_Reflection_Type_Kind kind) {
 
     case RRTK_number: return "number";
     case RRTK_bool:   return "bool";
+    case RRTK_string: return "string";
     case RRTK_c_str:  return "c_str";
     case RRTK_void_pointer: return "void_pointer";
     case RRTK_struct: return "struct";
@@ -284,55 +308,64 @@ void Initialize_Runtime_Reflection(Arena *allocator) {
 
     // NOTE it might be better to use the Begin_New_Type() method for these...
 
-    // X(Type, is_integer, is_signed)
-    #define BESTED_NUMBER_TYPES     \
-        X(u8, true, false)          \
-        X(u16, true,  false)        \
-        X(u32, true,  false)        \
-        X(u64, true,  false)        \
-                                    \
-        X(s8 , true,  true)         \
-        X(s16, true,  true)         \
-        X(s32, true,  true)         \
-        X(s64, true,  true)         \
-                                    \
-        X(f32, false, false)        \
-        X(f64, false, false)        \
+    // this is a pretty sweet macro
+    #define TYPE_IS_SIGNED(Type) (((Type)-1) < 0)
 
-    #define X(Type, is_integer, is_signed)                      \
+
+    // X(Type, is_integer)
+    #define BESTED_NUMBER_TYPES     \
+        X(u8 , true)        \
+        X(u16, true)        \
+        X(u32, true)        \
+        X(u64, true)        \
+                            \
+        X(s8 , true)        \
+        X(s16, true)        \
+        X(s32, true)        \
+        X(s64, true)        \
+                            \
+        X(f32, false)       \
+        X(f64, false)       \
+
+    #define X(Type, is_integer)                      \
         {                                                       \
             Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1);     \
             Mem_Zero_Struct(new_type);                          \
-            new_type->type_name              = S(#Type);        \
+            new_type->name                   = S(#Type);        \
             new_type->kind                   = RRTK_number;     \
             new_type->alignment              = Alignof(Type);   \
             new_type->size_in_bytes          = sizeof(Type);    \
             new_type->is_integer_type        = is_integer;      \
-            new_type->is_signed_integer_type = is_signed;       \
+            new_type->is_signed_integer_type = (is_integer) && TYPE_IS_SIGNED(Type);      \
         }
 
         BESTED_NUMBER_TYPES
     #undef X
 
 
-    {
-
+    { // bools
         // bools are not numbers.
-        Runtime_Reflection_Type type_bool = { .kind = RRTK_bool, .type_name = S("bool"), .size_in_bytes = sizeof(bool), .alignment = Alignof(bool) };
+        Runtime_Reflection_Type type_bool = { .kind = RRTK_bool, .name = S("bool"), .size_in_bytes = sizeof(bool), .alignment = Alignof(bool) };
         Array_Append(&runtime_reflection_type_array, type_bool);
 
         static_assert(sizeof(_Bool) == sizeof(bool), "both should exist, and both should be the same.");
         // this one is also here. kinda pointless though
-        Runtime_Reflection_Type type__Bool = { .kind = RRTK_bool, .type_name = S("_Bool"), .size_in_bytes = sizeof(bool), .alignment = Alignof(bool) };
+        Runtime_Reflection_Type type__Bool = { .kind = RRTK_bool, .name = S("_Bool"), .size_in_bytes = sizeof(bool), .alignment = Alignof(bool) };
         Array_Append(&runtime_reflection_type_array, type__Bool);
     }
 
+    Runtime_Reflection_Type type_string = { .kind = RRTK_string, .name = S("String"), .size_in_bytes = sizeof(String), .alignment = Alignof(String) };
+    Array_Append(&runtime_reflection_type_array, type_string);
 
-    Runtime_Reflection_Type type_c_str = { .kind = RRTK_c_str, .type_name = S("const char *"), .size_in_bytes = sizeof(const char *), .alignment = Alignof(const char *) };
+    Runtime_Reflection_Type type_c_str = { .kind = RRTK_c_str, .name = S("const char *"), .size_in_bytes = sizeof(const char *), .alignment = Alignof(const char *) };
     Array_Append(&runtime_reflection_type_array, type_c_str);
 
-    Runtime_Reflection_Type type_void_ptr = { .kind = RRTK_void_pointer, .type_name = S("void *"), .size_in_bytes = sizeof(void *), .alignment = Alignof(void *) };
+
+
+    Runtime_Reflection_Type type_void_ptr = { .kind = RRTK_void_pointer, .name = S("void *"), .size_in_bytes = sizeof(void *), .alignment = Alignof(void *) };
     Array_Append(&runtime_reflection_type_array, type_void_ptr);
+
+
 
     // add all the dumb c types after the good types.
     initialize_dumb_c_types();
@@ -340,48 +373,61 @@ void Initialize_Runtime_Reflection(Arena *allocator) {
 
 internal void initialize_dumb_c_types(void) {
 
-    // X(Type, is_integer, is_signed);
-    #define DUMB_C_TYPES_X_MACRO                        \
-        X(char                  , true,  CHAR_MIN < 0)  \
-        X(signed char           , true,  true )         \
-        X(unsigned char         , true,  false)         \
-        X(short                 , true,  true )         \
-        X(short int             , true,  true )         \
-        X(signed short          , true,  true )         \
-        X(signed short int      , true,  true )         \
-        X(unsigned short        , true,  false)         \
-        X(unsigned short int    , true,  false)         \
-        X(int                   , true,  true )         \
-        X(signed                , true,  true )         \
-        X(signed int            , true,  true )         \
-        X(unsigned              , true,  false)         \
-        X(unsigned int          , true,  false)         \
-        X(long                  , true,  true )         \
-        X(long int              , true,  true )         \
-        X(signed long           , true,  true )         \
-        X(signed long int       , true,  true )         \
-        X(unsigned long         , true,  false)         \
-        X(unsigned long int     , true,  false)         \
-        X(long long             , true,  true )         \
-        X(long long int         , true,  true )         \
-        X(signed long long      , true,  true )         \
-        X(signed long long int  , true,  true )         \
-        X(unsigned long long    , true,  false)         \
-        X(unsigned long long int, true,  false)         \
-        X(float                 , false, false)         \
-        X(double                , false, false)         \
-        X(long double           , false, false) // did you know that this is a 128-bit float?
+    // X(Type, is_integer);
+    #define DUMB_C_TYPES_X_MACRO            \
+        X(char                  , true)     \
+        X(signed char           , true)     \
+        X(unsigned char         , true)     \
+                                            \
+        X(short                 , true)     \
+        X(short int             , true)     \
+        X(signed short          , true)     \
+        X(signed short int      , true)     \
+                                            \
+        X(unsigned short        , true)     \
+        X(unsigned short int    , true)     \
+                                            \
+        X(int                   , true)     \
+        X(signed                , true)     \
+        X(signed int            , true)     \
+                                            \
+        X(unsigned              , true)     \
+        X(unsigned int          , true)     \
+                                            \
+        X(long                  , true)     \
+        X(long int              , true)     \
+        X(signed long           , true)     \
+        X(signed long int       , true)     \
+                                            \
+        X(unsigned long         , true)     \
+        X(unsigned long int     , true)     \
+                                            \
+        X(long long             , true)     \
+        X(long long int         , true)     \
+        X(signed long long      , true)     \
+        X(signed long long int  , true)     \
+                                            \
+        X(unsigned long long    , true)     \
+        X(unsigned long long int, true)     \
+                                            \
+        X(size_t                , true)     \
+        X(ssize_t               , true)     \
+        X(ptrdiff_t             , true)     \
+                                            \
+        X(float                 , false)    \
+        X(double                , false)    \
+        X(long double           , false) // did you know that this is a 128-bit float?
 
-    #define X(Type, is_integer, is_signed)                      \
+    #define X(Type, is_integer)                                 \
         {                                                       \
             Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1);     \
             Mem_Zero_Struct(new_type);                          \
-            new_type->type_name              = S(#Type);        \
+            new_type->name                   = S(#Type);        \
             new_type->kind                   = RRTK_number;     \
             new_type->alignment              = Alignof(Type);   \
             new_type->size_in_bytes          = sizeof(Type);    \
             new_type->is_integer_type        = is_integer;      \
-            new_type->is_signed_integer_type = is_signed;       \
+            new_type->is_signed_integer_type = (is_integer) && TYPE_IS_SIGNED(Type);  \
         }
 
         DUMB_C_TYPES_X_MACRO
@@ -400,9 +446,9 @@ Runtime_Reflection_Type *Maybe_Get_Type_Reflection_By_Name(String type_name) {
     //
     // TODO maybe handle when 2 different types have the same name?
     Array_For_Each(Runtime_Reflection_Type, it, &runtime_reflection_type_array) {
-        if (String_Eq(type_name, it->type_name)) {
+        if (String_Eq(type_name, it->name)) {
             if (it->kind == RRTK_NULL) {
-                PANIC("The Type you were trying to get ('"S_Fmt"') did not set its kind, the first thing you should do when mking a new type is setting the kind. See the Runtime_Reflection_Type_Kind for possible values.", S_Arg(it->type_name));
+                PANIC("The Type you were trying to get ('"S_Fmt"') did not set its kind, the first thing you should do when mking a new type is setting the kind. See the Runtime_Reflection_Type_Kind for possible values.", S_Arg(it->name));
             }
             return it;
         }
@@ -430,7 +476,7 @@ Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_b
     new_type->kind = RRTK_NULL;
 
     // user could be doing some funky stuff, allow it.
-    new_type->type_name     = String_Duplicate(runtime_reflection_type_array.allocator, type_name);
+    new_type->name          = String_Duplicate(runtime_reflection_type_array.allocator, type_name);
     new_type->size_in_bytes = size_in_bytes;
     new_type->alignment     = alignment;
 
@@ -446,9 +492,9 @@ void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_
 
     if (struct_type->kind != RRTK_struct) {
         if (struct_type->kind == RRTK_NULL) {
-            PANIC("tried to add a field to something that has not set its kind yet, make sure to set the kind of '"S_Fmt"' to RRTK_struct before adding any fields.", S_Arg(struct_type->type_name));
+            PANIC("tried to add a field to something that has not set its kind yet, make sure to set the kind of '"S_Fmt"' to RRTK_struct before adding any fields.", S_Arg(struct_type->name));
         } else {
-            PANIC("tried to add a field to the '"S_Fmt"' type, which isn't a struct, was %s", S_Arg(struct_type->type_name), RRTK_to_string(struct_type->kind));
+            PANIC("tried to add a field to the '"S_Fmt"' type, which isn't a struct, was %s", S_Arg(struct_type->name), RRTK_to_string(struct_type->kind));
         }
     }
 
@@ -479,7 +525,7 @@ Runtime_Reflection_Field *Get_Field_By_Name(Runtime_Reflection_Type *struct_type
     Runtime_Reflection_Field *maybe_field = Maybe_Get_Field_By_Name(struct_type, field_name);
     if (maybe_field != NULL) return maybe_field;
 
-    PANIC("field '"S_Fmt"' dose not exist on struct '"S_Fmt"'", S_Arg(field_name), S_Arg(struct_type->type_name));
+    PANIC("field '"S_Fmt"' dose not exist on struct '"S_Fmt"'", S_Arg(field_name), S_Arg(struct_type->name));
 }
 Runtime_Reflection_Field *Maybe_Get_Field_By_Name(Runtime_Reflection_Type *struct_type, String field_name) {
     if (struct_type->kind != RRTK_struct) PANIC("cannot get the field of non struct type, was '%s' type", RRTK_to_string(struct_type->kind));
@@ -506,7 +552,7 @@ s64 Type_As_Signed_Integer(Runtime_Reflection_Type *type, void *value) {
     case sizeof(s32): return (s64) (*(s32*)value);
     case sizeof(s64): return       (*(s64*)value);
 
-    default: PANIC("Cannot convert a signed integer (of type '"S_Fmt"') (of size %zu-bit) into signed integer, only accepts 8, 16, 32 and 64-bit sizes", S_Arg(type->type_name), type->size_in_bytes*8);
+    default: PANIC("Cannot convert a signed integer (of type '"S_Fmt"') (of size %zu-bit) into signed integer, only accepts 8, 16, 32 and 64-bit sizes", S_Arg(type->name), type->size_in_bytes*8);
     }
 }
 u64 Type_As_Unsigned_Integer(Runtime_Reflection_Type *type, void *value) {
@@ -514,7 +560,7 @@ u64 Type_As_Unsigned_Integer(Runtime_Reflection_Type *type, void *value) {
     if (type->is_integer_type == false)         PANIC("Cannot convert non integer type into unsigned integer");
     if (type->is_signed_integer_type == true)   PANIC("Cannot convert signed integer type into unsigned integer");
 
-    if (type->size_in_bytes > sizeof(u64))      PANIC("Cannot convert unsigned integer (of type '"S_Fmt"') (of size %zu-bit) into unsigned integer, size was bigger than 64-bit", S_Arg(type->type_name), type->size_in_bytes*8);
+    if (type->size_in_bytes > sizeof(u64))      PANIC("Cannot convert unsigned integer (of type '"S_Fmt"') (of size %zu-bit) into unsigned integer, size was bigger than 64-bit", S_Arg(type->name), type->size_in_bytes*8);
 
     u64 v = 0;
     // pretty funny trick, doesn't work with signed numbers.
@@ -529,7 +575,7 @@ f64 Type_As_Float(Runtime_Reflection_Type *type, void *value) {
     case sizeof(f32): return (f64) (*(f32*) value);
     case sizeof(f64): return       (*(f64*) value);
 
-    default: PANIC("Cannot convert float (of type '"S_Fmt"') (of size %zu-bit) to float, accepted sizes are 32 and 64-bit", S_Arg(type->type_name), type->size_in_bytes*8);
+    default: PANIC("Cannot convert float (of type '"S_Fmt"') (of size %zu-bit) to float, accepted sizes are 32 and 64-bit", S_Arg(type->name), type->size_in_bytes*8);
     }
 }
 
@@ -553,7 +599,7 @@ internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_T
             }
         } else {
 
-            if (String_Eq(type->type_name, S("long double"))) {
+            if (String_Eq(type->name, S("long double"))) {
                 // this dumbass type could possibly be 128-bit long. why
                 long double v = *(long double*) value;
                 String_Builder_printf(sb, "%Lf", v);
@@ -571,6 +617,10 @@ internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_T
         String_Builder_printf(sb, "%s", (*v) ? "true" : "false");
     } break;
 
+    case RRTK_string: {
+        String *v = value;
+        String_Builder_printf(sb, "\"" S_Fmt "\"", S_Arg(*v));
+    } break;
     case RRTK_c_str: {
         const char **v = value; // this is correct.
         if (*v != NULL) {
@@ -590,7 +640,7 @@ internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_T
     } break;
 
     case RRTK_struct: {
-        String_Builder_printf(sb, "("S_Fmt"){ ", S_Arg(type->type_name));
+        String_Builder_printf(sb, "("S_Fmt"){ ", S_Arg(type->name));
 
         Array_For_Each(Runtime_Reflection_Field, field, &type->fields) {
             u64 index = field - type->fields.items;
@@ -606,7 +656,7 @@ internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_T
         String_Builder_printf(sb, " }");
     } break;
 
-    default: PANIC("Unknown Type Kind %s, ("S_Fmt")", RRTK_to_string(type->kind), S_Arg(type->type_name));
+    default: PANIC("Unknown Type Kind %s, ("S_Fmt")", RRTK_to_string(type->kind), S_Arg(type->name));
     }
 }
 
@@ -638,7 +688,7 @@ typedef struct {
 
 internal void Generic_serialize_to_binary_format_recur(String_Builder *sb, Runtime_Reflection_Type *type, void *value_ptr) {
     switch (type->kind) {
-    case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(type->type_name));
+    case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(type->name));
 
     case RRTK_number: {
         String_Builder_Ptr_And_Size(sb, value_ptr, type->size_in_bytes);
@@ -649,14 +699,21 @@ internal void Generic_serialize_to_binary_format_recur(String_Builder *sb, Runti
         String_Builder_Ptr_And_Size(sb, value_ptr, type->size_in_bytes);
     } break;
 
+    case RRTK_string:
     case RRTK_c_str: {
-        // just turn it into a known size string.
-        const char *v = *((const char **)value_ptr);
-        String string = S(v);
 
-        u64 length = string.length;
-        String_Builder_Ptr_And_Size(sb, (void*) &length, sizeof(length));
-        String_Builder_Ptr_And_Size(sb, string.data, string.length);
+        String as_string;
+        if (type->kind == RRTK_string) {
+            String *v = value_ptr;
+            as_string = *v;
+        } else {
+            // just turn it into a known size string.
+            const char *v = *((const char **)value_ptr);
+            as_string = S(v);
+        }
+
+        String_Builder_Ptr_And_Size(sb, (void*) &as_string.length, sizeof(as_string.length));
+        String_Builder_Ptr_And_Size(sb, as_string.data, as_string.length);
     } break;
 
     case RRTK_void_pointer: {
@@ -693,7 +750,7 @@ void Generic_binary_format_serialize_by_type(String_Builder *sb, Runtime_Reflect
 
 const char *Generic_deserialize_to_binary_format_recur(String *input, Runtime_Reflection_Type *type, void *output, Arena *allocator) {
     switch (type->kind) {
-    case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(type->type_name));
+    case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(type->name));
 
     case RRTK_number:
     case RRTK_bool:
@@ -705,6 +762,7 @@ const char *Generic_deserialize_to_binary_format_recur(String *input, Runtime_Re
         String_Advance(input, type->size_in_bytes);
     } break;
 
+    case RRTK_string:
     case RRTK_c_str: {
 
         if (input->length < sizeof(u64)) {
@@ -721,8 +779,13 @@ const char *Generic_deserialize_to_binary_format_recur(String *input, Runtime_Re
         String the_string = { input->data, string_length };
         String resulting_string = String_Duplicate(allocator, the_string, .null_terminate = true);
 
-        // put the pointer to the data into place.
-        Mem_Copy(output, &resulting_string.data, sizeof(const char *));
+
+        if (type->kind == RRTK_string) {
+            Mem_Copy(output, &resulting_string, sizeof(String));
+        } else {
+            // put the pointer to the data into place.
+            Mem_Copy(output, &resulting_string.data, sizeof(const char *));
+        }
 
         String_Advance(input, string_length);
     } break;
@@ -783,6 +846,8 @@ const char *Generic_binary_format_deserialize_by_type(String input, Runtime_Refl
 
 
 
+
+
 u64 Generic_serialize_human_readable_by_type(String_Builder *sb, Runtime_Reflection_Type *type, void *value_ptr) {
     // step 1, version number. but skip for now.
 
@@ -796,12 +861,12 @@ u64 Generic_serialize_human_readable_by_type(String_Builder *sb, Runtime_Reflect
         // u64 index = field - type->fields.items;
 
         // "# [struct_name].[field_name] - [field_type]""
-        bytes_output += String_Builder_printf(sb, "# "S_Fmt"."S_Fmt" - "S_Fmt"\n", S_Arg(type->type_name), S_Arg(field->name), S_Arg(field->type->type_name));
+        bytes_output += String_Builder_printf(sb, "# "S_Fmt"."S_Fmt" - "S_Fmt"\n", S_Arg(type->name), S_Arg(field->name), S_Arg(field->type->name));
 
         void *field_value_ptr = value_ptr + field->offset;
         switch (field->type->kind) {
             // TODO maybe a "validate_type() function"
-            case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(field->type->type_name));
+            case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(field->type->name));
 
             case RRTK_number: {
                 if (field->type->is_integer_type) {
@@ -830,6 +895,7 @@ u64 Generic_serialize_human_readable_by_type(String_Builder *sb, Runtime_Reflect
             } break;
 
             case RRTK_bool:         TODO("Generic_serialize: RRTK_bool");
+            case RRTK_string:       TODO("Generic_serialize: RRTK_string");
             case RRTK_c_str:        TODO("Generic_serialize: RRTK_c_str");
             case RRTK_void_pointer: TODO("Generic_serialize: RRTK_void_pointer");
             case RRTK_struct:       TODO("Generic_serialize: RRTK_struct");
@@ -860,7 +926,7 @@ const char *Generic_deserialize_human_readable_by_type(String input_data, Runtim
         void *field_value_ptr = output + field->offset;
 
         switch (field->type->kind) {
-            case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(field->type->type_name));
+            case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(field->type->name));
 
             case RRTK_number: {
                 if (type->is_integer_type) {
@@ -887,6 +953,7 @@ const char *Generic_deserialize_human_readable_by_type(String input_data, Runtim
             } break;
 
             case RRTK_bool:         TODO("Generic_deserialize: RRTK_bool");
+            case RRTK_string:       TODO("Generic_serialize: RRTK_string");
             case RRTK_c_str:        TODO("Generic_deserialize: RRTK_c_str");
             case RRTK_void_pointer: TODO("Generic_deserialize: RRTK_void_pointer");
             case RRTK_struct:       TODO("Generic_deserialize: RRTK_struct");
@@ -899,6 +966,61 @@ const char *Generic_deserialize_human_readable_by_type(String input_data, Runtim
 
     return NULL;
 }
+
+
+
+
+
+
+bool Generic_deep_equal_by_type(Runtime_Reflection_Type *type, void *a, void *b) {
+    // this would be an easy function to switch to stack based recursion.
+
+    switch (type->kind) {
+        case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(type->name));
+
+        case RRTK_number:
+        case RRTK_bool:
+        case RRTK_void_pointer: {
+            // just check the raw memory,
+            return Mem_Eq(a, b, type->size_in_bytes);
+        }
+
+        case RRTK_string:
+        case RRTK_c_str: {
+            String string_a;
+            String string_b;
+            if (type->kind == RRTK_string) {
+                string_a = *(String*)a;
+                string_b = *(String*)b;
+            } else {
+                const char **c_str_a = a;
+                const char **c_str_b = b;
+
+                // I know this is inefficient, I dont care
+                // about c strings, use a better string type.
+                string_a = S(*c_str_a);
+                string_b = S(*c_str_b);
+            }
+            // this is also pretty much a Mem_Eq under the hood.
+            return String_Eq(string_a, string_b);
+        }
+
+        case RRTK_struct: {
+            Array_For_Each(Runtime_Reflection_Field, field, &type->fields) {
+                void *field_a = a + field->offset;
+                void *field_b = b + field->offset;
+
+                // short circuiting in action.
+                if (!Generic_deep_equal_by_type(field->type, field_a, field_b)) return false;
+            }
+            return true;
+        }
+
+        default: UNREACHABLE();
+    }
+}
+
+
 
 
 

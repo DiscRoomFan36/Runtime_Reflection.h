@@ -28,6 +28,7 @@
     /* watch out for this one, bool is a macro to _Bool */    \
     X(bool        , bool)       \
                                 \
+    X(String      , string)     \
     X(const char *, c_str)      \
     X(void *      , void_ptr)
 

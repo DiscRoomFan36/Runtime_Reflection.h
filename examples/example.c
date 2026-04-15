@@ -8,13 +8,12 @@ typedef struct {
     f64 height;
     bool has_any_loved_ones;
 
-    const char *name;
-    // String name_but_string;
+    String name;
 } Person;
 
 
 void Generate_Person_Runtime_Reflection_Type_Info(void) {
-    static_assert(sizeof(Person) == 32, "update when struct changes");
+    static_assert(sizeof(Person) == 40, "update when struct changes");
 
     Runtime_Reflection_Type *person_type = Begin_New_Type(Person);
     person_type->kind = RRTK_struct;
@@ -23,8 +22,7 @@ void Generate_Person_Runtime_Reflection_Type_Info(void) {
     Add_Field(person_type, Person, f64,  height);
     Add_Field(person_type, Person, bool, has_any_loved_ones);
 
-    Add_Field(person_type, Person, const char *, name);
-    // Add_Field(&person_type, Person, String, name_but_string);
+    Add_Field(person_type, Person, String, name);
 }
 
 
@@ -36,11 +34,10 @@ int main(void) {
 
 
     Person jim = {
-        .name = "jim",
-        // .name_but_string = S("jim bob"),
+        .name = S("jim"),
 
         .age = 32,
-        .height = 3.45, // in meters obviously
+        .height = 3.45, // in meters, obviously
 
         .has_any_loved_ones = false,
     };

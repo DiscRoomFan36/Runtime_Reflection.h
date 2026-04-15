@@ -94,7 +94,7 @@ void test_basic_types_binary_serialization(void) {
 
         // TODO maybe TEST_MA needs a TEST_SUCCESS() function
         TEST_EXPECT(true && "successfully loaded all fields");
-        TEST_EXPECT_EQ(basic_types_struct_type->fields.count, 13);
+        TEST_EXPECT_EQ(basic_types_struct_type->fields.count, 14);
     }
 
     Basic_Types_Struct basic_types_struct = {
@@ -109,8 +109,9 @@ void test_basic_types_binary_serialization(void) {
         .a_f32      =  9,
         .a_f64      = 10,
         .a_bool     = true,
-        .a_c_str      = "1212212121212121212123412341234439871432",
-        .a_void_ptr   = (void*) 0xcafebabebeefbabe, // just a funny number
+        .a_string   = S("yabba dabba doo"),
+        .a_c_str    = "1212212121212121212123412341234439871432",
+        .a_void_ptr = (void*) 0xcafebabebeefbabe, // just a funny number
     };
 
     String_Builder sb = ZEROED;
