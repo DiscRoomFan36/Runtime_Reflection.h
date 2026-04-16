@@ -343,14 +343,21 @@ void Initialize_Runtime_Reflection(Arena *allocator) {
 
 
     { // bools
-        // bools are not numbers.
-        Runtime_Reflection_Type type_bool = { .kind = RRTK_bool, .name = S("bool"), .size_in_bytes = sizeof(bool), .alignment = Alignof(bool) };
-        Array_Append(&runtime_reflection_type_array, type_bool);
+        #define ADD_SIZED_BOOL(Type)                            \
+            {                                                   \
+                Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1, true);    \
+                new_type->name              = S(#Type);         \
+                new_type->kind              = RRTK_bool;        \
+                new_type->alignment         = Alignof(Type);    \
+                new_type->size_in_bytes     = sizeof(Type);     \
+            }
 
-        static_assert(sizeof(_Bool) == sizeof(bool), "both should exist, and both should be the same.");
-        // this one is also here. kinda pointless though
-        Runtime_Reflection_Type type__Bool = { .kind = RRTK_bool, .name = S("_Bool"), .size_in_bytes = sizeof(bool), .alignment = Alignof(bool) };
-        Array_Append(&runtime_reflection_type_array, type__Bool);
+        ADD_SIZED_BOOL(bool);
+        ADD_SIZED_BOOL(_Bool);
+        ADD_SIZED_BOOL(b8 );
+        ADD_SIZED_BOOL(b16);
+        ADD_SIZED_BOOL(b32);
+        ADD_SIZED_BOOL(b64);
     }
 
     Runtime_Reflection_Type type_string = { .kind = RRTK_string, .name = S("String"), .size_in_bytes = sizeof(String), .alignment = Alignof(String) };
