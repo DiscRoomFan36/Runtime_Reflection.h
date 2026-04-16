@@ -327,16 +327,15 @@ void Initialize_Runtime_Reflection(Arena *allocator) {
         X(f32, false)       \
         X(f64, false)       \
 
-    #define X(Type, is_integer)                      \
+    #define X(Type, is_integer)                                 \
         {                                                       \
-            Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1);     \
-            Mem_Zero_Struct(new_type);                          \
-            new_type->name                   = S(#Type);        \
-            new_type->kind                   = RRTK_number;     \
-            new_type->alignment              = Alignof(Type);   \
-            new_type->size_in_bytes          = sizeof(Type);    \
-            new_type->is_integer_type        = is_integer;      \
-            new_type->is_signed_integer_type = (is_integer) && TYPE_IS_SIGNED(Type);      \
+            Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1, true);     \
+            new_type->name                    = S(#Type);       \
+            new_type->kind                    = RRTK_number;    \
+            new_type->alignment               = Alignof(Type);  \
+            new_type->size_in_bytes           = sizeof(Type);   \
+            new_type->is_integer_type         = is_integer;     \
+            new_type->is_signed_integer_type  = (is_integer) && TYPE_IS_SIGNED(Type);       \
         }
 
         BESTED_NUMBER_TYPES
@@ -420,8 +419,7 @@ internal void initialize_dumb_c_types(void) {
 
     #define X(Type, is_integer)                                 \
         {                                                       \
-            Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1);     \
-            Mem_Zero_Struct(new_type);                          \
+            Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1, true);     \
             new_type->name                   = S(#Type);        \
             new_type->kind                   = RRTK_number;     \
             new_type->alignment              = Alignof(Type);   \
@@ -468,9 +466,7 @@ Runtime_Reflection_Type *Get_Type_Reflection_By_Name(String type_name) {
 Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_bytes, u64 alignment) {
     assert_runtime_reflection_has_been_initalized();
 
-    Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1);
-
-    Mem_Zero_Struct(new_type);
+    Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1, true);
 
     // if the user doesn't set this, its gonna panic at some point.
     new_type->kind = RRTK_NULL;
