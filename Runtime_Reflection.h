@@ -4,9 +4,9 @@
 // Author   - Fletcher M
 //
 // Created  - 11/04/26
-// Modified - 15/04/26
+// Modified - 17/04/26
 //
-// Version  - v0.0.5
+// Version  - v0.0.6
 //
 // Make sure to...
 //      #define RUNTIME_REFLECTION_IMPLEMENTATION
@@ -193,12 +193,12 @@ String Generic_sprint_by_type(Runtime_Reflection_Type *type, void *value_ptr, Ge
 // Generic binary format serialization and deserialization.
 // slap this baby straight into a file and be done with it.
 //
-#define Generic_binary_format_serialize(sb, Type, value_ptr)    Generic_binary_format_serialize_by_type((sb), Reflect(Type), (value_ptr))
-void Generic_binary_format_serialize_by_type(String_Builder *sb, Runtime_Reflection_Type *type, void *value_ptr);
+#define Generic_serialize_packed_binary_format(sb, Type, value_ptr)    Generic_serialize_packed_binary_format_by_type((sb), Reflect(Type), (value_ptr))
+void Generic_serialize_packed_binary_format_by_type(String_Builder *sb, Runtime_Reflection_Type *type, void *value_ptr);
 
 // TODO accept an allocator.
-#define Generic_binary_format_deserialize(input, Type, output)    Generic_binary_format_deserialize_by_type((input), Reflect(Type), (output))
-const char *Generic_binary_format_deserialize_by_type(String input, Runtime_Reflection_Type *type, void *output);
+#define Generic_deserialize_packed_binary_format(input, Type, output)    Generic_deserialize_packed_binary_format_by_type((input), Reflect(Type), (output))
+const char *Generic_deserialize_packed_binary_format_by_type(String input, Runtime_Reflection_Type *type, void *output);
 
 
 
@@ -681,15 +681,7 @@ String Generic_sprint_by_type(Runtime_Reflection_Type *type, void *value_ptr, Ge
 
 
 
-typedef struct {
-    u32 magic_number;
-    u32 version_number;
-
-    // TODO maybe have struct name in here as well?
-    // or just leave that up to the user?
-} Generic_Binary_Format_Header;
-
-internal void Generic_serialize_to_binary_format_recur(String_Builder *sb, Runtime_Reflection_Type *type, void *value_ptr) {
+void Generic_serialize_packed_binary_format_by_type(String_Builder *sb, Runtime_Reflection_Type *type, void *value_ptr) {
     switch (type->kind) {
     case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(type->name));
 
@@ -727,7 +719,7 @@ internal void Generic_serialize_to_binary_format_recur(String_Builder *sb, Runti
     case RRTK_struct: {
         Array_For_Each(Runtime_Reflection_Field, field, &type->fields) {
             void *field_value_ptr = value_ptr + field->offset;
-            Generic_serialize_to_binary_format_recur(sb, field->type, field_value_ptr);
+            Generic_serialize_packed_binary_format_by_type(sb, field->type, field_value_ptr);
         }
     } break;
 
@@ -735,23 +727,9 @@ internal void Generic_serialize_to_binary_format_recur(String_Builder *sb, Runti
     }
 }
 
-#define GENERIC_BINARY_FORMAT_MAGIC_NUMBER (0xcafebabe)
-
-void Generic_binary_format_serialize_by_type(String_Builder *sb, Runtime_Reflection_Type *type, void *value_ptr) {
-    Generic_Binary_Format_Header header = {
-        .magic_number = GENERIC_BINARY_FORMAT_MAGIC_NUMBER,
-        .version_number = 1,
-    };
-
-    String_Builder_Ptr_And_Size(sb, (void*) &header, sizeof(header));
-
-    Generic_serialize_to_binary_format_recur(sb, type, value_ptr);
-}
 
 
-
-
-const char *Generic_deserialize_to_binary_format_recur(String *input, Runtime_Reflection_Type *type, void *output, Arena *allocator) {
+internal const char *Generic_deserialize_packed_binary_format_recur(String *input, Runtime_Reflection_Type *type, void *output, Arena *allocator) {
     switch (type->kind) {
     case RRTK_NULL: PANIC("RRTK_NULL in type '"S_Fmt"'", S_Arg(type->name));
 
@@ -780,6 +758,7 @@ const char *Generic_deserialize_to_binary_format_recur(String *input, Runtime_Re
         }
 
         String the_string = { input->data, string_length };
+        // its ok the use a null allocator here.
         String resulting_string = String_Duplicate(allocator, the_string, .null_terminate = true);
 
 
@@ -796,7 +775,7 @@ const char *Generic_deserialize_to_binary_format_recur(String *input, Runtime_Re
     case RRTK_struct: {
         Array_For_Each(Runtime_Reflection_Field, field, &type->fields) {
             void *output_value_ptr = output + field->offset;
-            const char *result = Generic_deserialize_to_binary_format_recur(input, field->type, output_value_ptr, allocator);
+            const char *result = Generic_deserialize_packed_binary_format_recur(input, field->type, output_value_ptr, allocator);
             if (result != NULL) return result;
         }
     } break;
@@ -804,28 +783,11 @@ const char *Generic_deserialize_to_binary_format_recur(String *input, Runtime_Re
     default: UNREACHABLE();
     }
 
-    // serialization
-
     return NULL;
 }
 
-const char *Generic_binary_format_deserialize_by_type(String input, Runtime_Reflection_Type *type, void *output) {
-    if (input.length < sizeof(Generic_Binary_Format_Header)) {
-        return temp_sprintf("Header was to small, expected something at least %zu long, was %zu", sizeof(Generic_Binary_Format_Header), input.length);
-    }
 
-    Generic_Binary_Format_Header *header = (void*) input.data;
-    if (header->magic_number != GENERIC_BINARY_FORMAT_MAGIC_NUMBER) {
-        return temp_sprintf("Header magic number was incorrect, expected %d, was %d", GENERIC_BINARY_FORMAT_MAGIC_NUMBER, header->magic_number);
-    }
-
-    if (header->version_number != 1) {
-        return temp_sprintf("Unrecognised Header Version number, expected %d, got %u", 1, header->version_number);
-    }
-
-
-    String_Advance(&input, sizeof(Generic_Binary_Format_Header));
-
+const char *Generic_deserialize_packed_binary_format_by_type(String input, Runtime_Reflection_Type *type, void *output) {
     // TODO make a parameter.
     Arena *allocator = NULL;
 
@@ -836,7 +798,7 @@ const char *Generic_binary_format_deserialize_by_type(String input, Runtime_Refl
     // have your pour progarming to blame.
     Mem_Zero(output, type->size_in_bytes);
 
-    const char *err = Generic_deserialize_to_binary_format_recur(&input, type, output, allocator);
+    const char *err = Generic_deserialize_packed_binary_format_recur(&input, type, output, allocator);
     if (err != NULL) return err;
 
     if (input.length != 0) {
@@ -845,7 +807,6 @@ const char *Generic_binary_format_deserialize_by_type(String input, Runtime_Refl
 
     return NULL;
 }
-
 
 
 

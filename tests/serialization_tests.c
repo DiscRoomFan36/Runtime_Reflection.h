@@ -22,7 +22,7 @@ void test_binary_serialization_works_for_simple_packed_structures(void) {
     };
 
     String_Builder sb = ZEROED;
-    Generic_binary_format_serialize(&sb, Simple, &simple);
+    Generic_serialize_packed_binary_format(&sb, Simple, &simple);
 
     String serialized = String_Builder_To_String(&sb);
 
@@ -30,7 +30,7 @@ void test_binary_serialization_works_for_simple_packed_structures(void) {
     // put junk value in struct, better test this way.
     Mem_Set(&deserialized, -1, sizeof(deserialized));
 
-    const char *err = Generic_binary_format_deserialize(serialized, Simple, &deserialized);
+    const char *err = Generic_deserialize_packed_binary_format(serialized, Simple, &deserialized);
     TEST_EXPECT(err == NULL);
 
     TEST_EXPECT(Mem_Eq(&simple, &deserialized, sizeof(Simple)));
@@ -59,7 +59,7 @@ void test_binary_serialization_works_for_structs_with_padding(void) {
     };
 
     String_Builder sb = ZEROED;
-    Generic_binary_format_serialize(&sb, Simple, &simple);
+    Generic_serialize_packed_binary_format(&sb, Simple, &simple);
 
     String serialized = String_Builder_To_String(&sb);
 
@@ -67,7 +67,7 @@ void test_binary_serialization_works_for_structs_with_padding(void) {
     // put junk value in struct, better test this way.
     Mem_Set(&deserialized, -1, sizeof(deserialized));
 
-    const char *err = Generic_binary_format_deserialize(serialized, Simple, &deserialized);
+    const char *err = Generic_deserialize_packed_binary_format(serialized, Simple, &deserialized);
     TEST_EXPECT(err == NULL);
 
     // this test is really about weather this zeros the struct before deserialization.
@@ -115,10 +115,10 @@ void test_basic_types_binary_serialization(void) {
     };
 
     String_Builder sb = ZEROED;
-    Generic_binary_format_serialize(&sb, Basic_Types_Struct, &basic_types_struct);
+    Generic_serialize_packed_binary_format(&sb, Basic_Types_Struct, &basic_types_struct);
 
     Basic_Types_Struct result;
-    const char *err = Generic_binary_format_deserialize(String_Builder_To_String(&sb), Basic_Types_Struct, &result);
+    const char *err = Generic_deserialize_packed_binary_format(String_Builder_To_String(&sb), Basic_Types_Struct, &result);
     TEST_EXPECT(err == NULL);
 
     TEST_EXPECT_EQ(basic_types_struct.a_u8 , result.a_u8 );
@@ -144,10 +144,10 @@ void test_binary_serialization_works_with_non_structs(void) {
     s8 my_cool_number = 5;
 
     String_Builder sb = ZEROED;
-    Generic_binary_format_serialize(&sb, s8, &my_cool_number);
+    Generic_serialize_packed_binary_format(&sb, s8, &my_cool_number);
 
     s8 result;
-    const char *err = Generic_binary_format_deserialize(String_Builder_To_String(&sb), s8, &result);
+    const char *err = Generic_deserialize_packed_binary_format(String_Builder_To_String(&sb), s8, &result);
     TEST_EXPECT(err == NULL);
 
     TEST_EXPECT_EQ(my_cool_number, result);
