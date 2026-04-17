@@ -10,4 +10,10 @@ void test_that_using_reflect_unknown_type_will_crash(void) {
     my_cool_int baz = 3;
     (void) my_cool_int_type;
     (void) baz;
+
+}
+
+void test_calling_initialize_runtime_reflection_twice_crashes(void) {
+    Initialize_Runtime_Reflection(NULL);
+    Initialize_Runtime_Reflection(NULL);
 }

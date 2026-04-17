@@ -40,9 +40,9 @@ int main(void) {
 
 
     { // misc api tests
-        // TODO have Expect_Failed or something in TEST_MA.h
-        ADD_TEST(test_that_using_reflect_unknown_type_will_crash, .custom_name = "Reflect On Unknown Type Crashes");
-        // ADD_TEST(test_that_using_reflect_unknown_type_will_crash, .expect_crash = true);
+        // TODO TEST_MA.h testing groups. aka .test_group = "Misc API Tests"
+        ADD_TEST(test_that_using_reflect_unknown_type_will_crash,           .expect_crash = true, .custom_name = "Reflect On Unknown Type Crashes");
+        ADD_TEST(test_calling_initialize_runtime_reflection_twice_crashes,  .expect_crash = true);
     }
 
 

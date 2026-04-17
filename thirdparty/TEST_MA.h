@@ -4,7 +4,7 @@
 // Author   - Fletcher M
 //
 // Created  - 19/01/26
-// Modified - 10/04/26
+// Modified - 17/04/26
 //
 //
 // TEST_MA.h is a C testing library, Simply create some test,
@@ -185,6 +185,15 @@ typedef struct TEST_MA_Add_Test_Opt {
     // WARNING: test framework will not catch crashes
     // WARNING: test framework will not catch inf loops. (and timeout dose not work)
     bool run_without_sandbox;
+
+    // if set to true, will pass the test if the test
+    // runner crashes, otherwise will fail.
+    //
+    // TEST_FAIL() will still fail the test, its just that
+    // returning from the function without crashing is incorrect.
+    //
+    // not a good idea to run this one without the sandbox.
+    bool expect_crash;
 } TEST_MA_Add_Test_Opt;
 
 //
@@ -859,8 +868,18 @@ TEST_MA_internal void TEST_MA_internal_run_one_test(size_t test_index) {
                 // @Leak we could keep track of things like this, but meh.
                 to_test->reason_for_test_failure = strdup(buf);
             } else {
-                to_test->reason_for_test_failure = "UNKNOWN: Test did not communicate with test handler, it probably crashed.";
+                if (to_test->opt.expect_crash) {
+                    // it crashed, thats what we expected.
+                    to_test->test_failed = false;
+                } else {
+                    to_test->reason_for_test_failure = "UNKNOWN: Test did not communicate with test handler, it probably crashed.";
+                }
             }
+        }
+    } else {
+        if (to_test->opt.expect_crash) {
+            to_test->test_failed = true;
+            to_test->reason_for_test_failure = "NO_CRASH: Test did not crash and exited successfully, witch isn't what you expected to happen.";
         }
     }
 
