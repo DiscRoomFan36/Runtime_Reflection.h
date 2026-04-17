@@ -6,7 +6,7 @@
 // Created  - 11/04/26
 // Modified - 17/04/26
 //
-// Version  - v0.0.6
+// Version  - v0.0.7
 //
 // Make sure to...
 //      #define RUNTIME_REFLECTION_IMPLEMENTATION
@@ -111,6 +111,9 @@ struct Runtime_Reflection_Type {
 
     // TODO add a bool is_mem_cmp_safe; variable, so structs with
     // only number's / void *'s and bool's can be Mem_Eq() and Mem_Copy()'d quickly
+    //
+    // also maybe we could detect the holes / padding area's of
+    // the struct, so we don't take into account junk data.
 
 
     // if this is a struct, it has fields.
@@ -232,7 +235,7 @@ const char *Generic_deserialize_human_readable_by_type(String input_data, Runtim
 //
 // will ignore all data in struct padding sections, or any
 // struct fields not registered in the type system.
-#define Generic_deep_equal(Type, a_ptr, b_ptr) (false && "TODO: Generic_deep_equal")
+#define Generic_deep_equal(Type, a_ptr, b_ptr) Generic_deep_equal_by_type(Reflect(Type), a_ptr, b_ptr)
 bool Generic_deep_equal_by_type(Runtime_Reflection_Type *type, void *a, void *b);
 
 

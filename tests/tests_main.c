@@ -8,6 +8,8 @@
 
 #include "serialization_tests.c"
 
+#include "deep_equal_tests.c"
+
 
 int main(void) {
     Arena runtime_reflection_arena = ZEROED;
@@ -36,6 +38,10 @@ int main(void) {
         }
 
         ADD_TEST(test_human_readable_serialization);
+    }
+
+    { // deep equal tests
+        ADD_TEST(test_deep_equal_wont_care_about_junk_padding);
     }
 
 
