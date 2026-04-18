@@ -6,7 +6,7 @@
 // Created  - 11/04/26
 // Modified - 18/04/26
 //
-// Version  - v0.0.8
+// Version  - v0.0.9
 //
 // Make sure to...
 //      #define RUNTIME_REFLECTION_IMPLEMENTATION
@@ -146,9 +146,9 @@ void Initialize_Runtime_Reflection(Arena *allocator);
 //     Runtime_Reflection_Type *foo_type = Begin_New_Type(Foo);
 //     foo_type->kind = RRTK_struct;
 // ```
-#define Begin_New_Type(Type)      Begin_New_Type_Internal(S(#Type), sizeof(Type), Alignof(Type))
+#define Begin_New_Type(Type)      Begin_New_Type_Internal(S(#Type), sizeof(Type), Alignof(Type), Get_Source_Code_Location())
 
-Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_bytes, u64 alignment);
+Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_bytes, u64 alignment, Source_Code_Location caller_location);
 
 
 
@@ -161,9 +161,9 @@ void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_
 
 
 #define Make_New_Array_Type(Array_Type, Inner_Type)     \
-    Make_New_Array_Type_Internal(S(#Array_Type), Reflect(Inner_Type))
+    Make_New_Array_Type_Internal(S(#Array_Type), Reflect(Inner_Type), Get_Source_Code_Location())
 
-void Make_New_Array_Type_Internal(String new_array_type_name, Runtime_Reflection_Type *item_type);
+void Make_New_Array_Type_Internal(String new_array_type_name, Runtime_Reflection_Type *item_type, Source_Code_Location caller_location);
 
 
 // to use your reflected type get it here.
@@ -173,7 +173,7 @@ void Make_New_Array_Type_Internal(String new_array_type_name, Runtime_Reflection
 Runtime_Reflection_Type *Get_Type_Reflection_By_Name(String type_name, Source_Code_Location caller_location);
 
 // this function might return NULL.
-Runtime_Reflection_Type *Maybe_Get_Type_Reflection_By_Name(String type_name);
+Runtime_Reflection_Type *Maybe_Get_Type_Reflection_By_Name(String type_name, Source_Code_Location caller_location);
 
 
 // will panic if:
@@ -220,9 +220,9 @@ typedef struct {
 } Generic_sprint_Opt;
 
 // has optional arguments: Generic_sprint_Opt
-#define Generic_sprint(Type, value_ptr, ...) Generic_sprint_by_type(Reflect(Type), value_ptr, (Generic_sprint_Opt){ __VA_ARGS__ })
+#define Generic_sprint(Type, value_ptr, ...) Generic_sprint_by_type(Reflect(Type), value_ptr, (Generic_sprint_Opt){ __VA_ARGS__ }, Get_Source_Code_Location())
 
-String Generic_sprint_by_type(Runtime_Reflection_Type *type, void *value_ptr, Generic_sprint_Opt options);
+String Generic_sprint_by_type(Runtime_Reflection_Type *type, void *value_ptr, Generic_sprint_Opt options, Source_Code_Location caller_location);
 
 
 
@@ -295,10 +295,10 @@ global_variable Runtime_Reflection_Type_Array runtime_reflection_type_array = ZE
 global_variable bool runtime_reflection_has_been_initalized = false;
 
 
-internal void assert_runtime_reflection_has_been_initalized(void) {
+internal void assert_runtime_reflection_has_been_initalized(Source_Code_Location caller_location) {
     if (runtime_reflection_has_been_initalized) return;
 
-    PANIC("Runtime Reflection has not been initalized!!! remember to call Initialize_Runtime_Reflection() at the start of your program.");
+    PANIC(SCL_Fmt" Runtime Reflection has not been initalized!!! remember to call Initialize_Runtime_Reflection() at the start of your program.", SCL_Arg(caller_location));
 }
 
 internal const char *RRTK_to_string(Runtime_Reflection_Type_Kind kind) {
@@ -471,8 +471,8 @@ void Initialize_Runtime_Reflection(Arena *allocator) {
 
 
 
-Runtime_Reflection_Type *Maybe_Get_Type_Reflection_By_Name(String type_name) {
-    assert_runtime_reflection_has_been_initalized();
+Runtime_Reflection_Type *Maybe_Get_Type_Reflection_By_Name(String type_name, Source_Code_Location caller_location) {
+    assert_runtime_reflection_has_been_initalized(caller_location);
 
     // TODO this would need some help to detect c_str's, 'const char *' vs 'const char*'
     // TODO also would need to handle pointers better
@@ -489,9 +489,9 @@ Runtime_Reflection_Type *Maybe_Get_Type_Reflection_By_Name(String type_name) {
     return NULL;
 }
 Runtime_Reflection_Type *Get_Type_Reflection_By_Name(String type_name, Source_Code_Location caller_location) {
-    assert_runtime_reflection_has_been_initalized();
+    assert_runtime_reflection_has_been_initalized(caller_location);
 
-    Runtime_Reflection_Type *type = Maybe_Get_Type_Reflection_By_Name(type_name);
+    Runtime_Reflection_Type *type = Maybe_Get_Type_Reflection_By_Name(type_name, caller_location);
     if (type != NULL) return type;
 
     // this would be better with source code location.
@@ -499,8 +499,8 @@ Runtime_Reflection_Type *Get_Type_Reflection_By_Name(String type_name, Source_Co
 }
 
 
-Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_bytes, u64 alignment) {
-    assert_runtime_reflection_has_been_initalized();
+Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_bytes, u64 alignment, Source_Code_Location caller_location) {
+    assert_runtime_reflection_has_been_initalized(caller_location);
 
     Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1, true);
 
@@ -520,7 +520,7 @@ Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_b
 
 
 void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_name, String field_name, u64 offset, Source_Code_Location caller_location) {
-    assert_runtime_reflection_has_been_initalized();
+    assert_runtime_reflection_has_been_initalized(caller_location);
 
     if (struct_type->kind != RRTK_struct) {
         if (struct_type->kind == RRTK_NULL) {
@@ -548,12 +548,12 @@ void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_
     Array_Append(&struct_type->fields, field);
 }
 
-void Make_New_Array_Type_Internal(String new_array_type_name, Runtime_Reflection_Type *item_type) {
-    assert_runtime_reflection_has_been_initalized();
+void Make_New_Array_Type_Internal(String new_array_type_name, Runtime_Reflection_Type *item_type, Source_Code_Location caller_location) {
+    assert_runtime_reflection_has_been_initalized(caller_location);
 
     // array types are structured like the Generic_Array,
     // if this is not the case, your screwed.
-    Runtime_Reflection_Type *new_array_type = Begin_New_Type_Internal(new_array_type_name, sizeof(Generic_Array), Alignof(Generic_Array));
+    Runtime_Reflection_Type *new_array_type = Begin_New_Type_Internal(new_array_type_name, sizeof(Generic_Array), Alignof(Generic_Array), caller_location);
     new_array_type->kind = RRTK_array;
 
     new_array_type->array_item_type = item_type;
@@ -641,8 +641,8 @@ internal void check_generic_array_is_not_obviously_wrong(Runtime_Reflection_Type
 
 
 
-internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_Type *type, void *value) {
-    assert_runtime_reflection_has_been_initalized();
+internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_Type *type, void *value, Source_Code_Location caller_location) {
+    assert_runtime_reflection_has_been_initalized(caller_location);
 
     switch (type->kind) {
     case RRTK_NULL: UNREACHABLE();
@@ -707,7 +707,7 @@ internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_T
             if (index != 0) String_Builder_printf(sb, ", ");
 
             String_Builder_printf(sb, "."S_Fmt" = ", S_Arg(field->name));
-            runtime_reflection_sprint(sb, field->type, value + field->offset);
+            runtime_reflection_sprint(sb, field->type, value + field->offset, caller_location);
         }
 
         String_Builder_printf(sb, " }");
@@ -723,7 +723,7 @@ internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_T
             if (index != 0) String_Builder_printf(sb, ", ");
 
             void *item_offset = array->items + index * type->array_item_type->size_in_bytes;
-            runtime_reflection_sprint(sb, type->array_item_type, item_offset);
+            runtime_reflection_sprint(sb, type->array_item_type, item_offset, caller_location);
         }
         String_Builder_printf(sb, " ]");
     } break;
@@ -733,13 +733,13 @@ internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_T
 }
 
 
-String Generic_sprint_by_type(Runtime_Reflection_Type *type, void *value_ptr, Generic_sprint_Opt options) {
-    assert_runtime_reflection_has_been_initalized();
+String Generic_sprint_by_type(Runtime_Reflection_Type *type, void *value_ptr, Generic_sprint_Opt options, Source_Code_Location caller_location) {
+    assert_runtime_reflection_has_been_initalized(caller_location);
 
     String_Builder sb = ZEROED;
     sb.allocator = options.allocator;
 
-    runtime_reflection_sprint(&sb, type, value_ptr);
+    runtime_reflection_sprint(&sb, type, value_ptr, caller_location);
 
     String result = String_Builder_To_String(&sb);
     if (sb.allocator != NULL) String_Builder_Free(&sb);
