@@ -3,6 +3,8 @@
 
 
 void test_binary_serialization_works_for_simple_packed_structures(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     typedef struct {
         s32 foo;
         s32 bar;
@@ -37,6 +39,8 @@ void test_binary_serialization_works_for_simple_packed_structures(void) {
 }
 
 void test_binary_serialization_works_for_structs_with_padding(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     typedef struct {
         s32 foo;
         bool rip_struct_padding;
@@ -75,6 +79,8 @@ void test_binary_serialization_works_for_structs_with_padding(void) {
 }
 
 void test_basic_types_binary_serialization(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     typedef struct {
         #define X(Type, name) Type a_ ## name;
             COMMON_TYPES
@@ -139,6 +145,7 @@ void test_basic_types_binary_serialization(void) {
 }
 
 void test_binary_serialization_works_with_non_structs(void) {
+    Initialize_Runtime_Reflection(NULL);
 
     // this is very important. keep it safe.
     s8 my_cool_number = 5;
@@ -156,12 +163,16 @@ void test_binary_serialization_works_with_non_structs(void) {
 
 
 void test_binary_serialization_fails_on_bad_inputs(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     TEST_FAIL("TODO: make test");
 }
 
 
 // TODO human readable serialization.
 void test_human_readable_serialization(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     TEST_FAIL("TODO: make test");
 }
 

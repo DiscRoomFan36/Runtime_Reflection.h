@@ -12,11 +12,8 @@
 
 
 int main(void) {
-    Arena runtime_reflection_arena = ZEROED;
-    Initialize_Runtime_Reflection(&runtime_reflection_arena);
-
     { // basic tests
-        ADD_TEST(test_common_c_types,       .custom_name = "All Basic C Types");
+        ADD_TEST(test_common_c_types,          .custom_name = "All Basic C Types");
         ADD_TEST(test_dumb_and_stupid_c_types, .custom_name = "Dumb & Stupid C Types");
 
         // this test will fail.
@@ -24,8 +21,8 @@ int main(void) {
     }
 
     { // advanced tests
-        ADD_TEST(test_array_runtime_reflection, .run_without_sandbox = true);
-        ADD_TEST(test_all_advanced_types_at_once,          .custom_name = "Advanced Types");
+        ADD_TEST(test_array_runtime_reflection);
+        ADD_TEST(test_all_advanced_types_at_once, .custom_name = "Advanced Types");
     }
 
     { // Serialization and Deserialization
@@ -49,6 +46,7 @@ int main(void) {
 
     { // misc api tests
         // TODO TEST_MA.h testing groups. aka .test_group = "Misc API Tests"
+        ADD_TEST(test_will_crash_if_reflecting_before_initialization,       .expect_crash = true);
         ADD_TEST(test_that_using_reflect_unknown_type_will_crash,           .expect_crash = true, .custom_name = "Reflect On Unknown Type Crashes");
         ADD_TEST(test_calling_initialize_runtime_reflection_twice_crashes,  .expect_crash = true);
     }
@@ -62,7 +60,6 @@ int main(void) {
         fprintf(stderr, "failed %d tests\n", test_fails);
     }
 
-    Arena_Free(&runtime_reflection_arena);
     return test_fails ? 1 : 0;
 }
 

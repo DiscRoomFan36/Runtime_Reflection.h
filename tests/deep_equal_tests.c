@@ -17,6 +17,8 @@ void add_bad_padding_struct_reflection(void) {
 }
 
 void test_deep_equal_wont_care_about_junk_padding(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     add_bad_padding_struct_reflection();
 
     Bad_Padding_Struct two_bad_paddings[2] = ZEROED;
@@ -39,6 +41,8 @@ void test_deep_equal_wont_care_about_junk_padding(void) {
 
 
 void test_deep_equal_works_on_arrays_with_junk(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     add_bad_padding_struct_reflection();
 
     typedef Array(Bad_Padding_Struct) Bad_Padding_Struct_Array;

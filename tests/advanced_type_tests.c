@@ -3,6 +3,8 @@
 
 
 void test_array_runtime_reflection(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     typedef struct { s32 age; f32 height; } Faz;
     {
         Runtime_Reflection_Type *faz_type = Begin_New_Type(Faz);
@@ -21,7 +23,7 @@ void test_array_runtime_reflection(void) {
         String sprinted;
 
         sprinted = Generic_sprint(Faz_Array, &array);
-        printf("empty array: "S_Fmt"\n", S_Arg(sprinted));
+        printf("empty array : "S_Fmt"\n", S_Arg(sprinted));
 
         Array_Append(&array, ((Faz){ .age = 40,  .height = 1.5 }));
         Array_Append(&array, ((Faz){ .age = 52,  .height = 2.5 }));
@@ -44,6 +46,8 @@ void test_array_runtime_reflection(void) {
 
 
 void test_all_advanced_types_at_once(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     typedef struct {
         s32 bar;
         f64 baz;

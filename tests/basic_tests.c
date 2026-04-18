@@ -3,6 +3,8 @@
 
 
 void test_common_c_types(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     typedef struct {
         #define X(Type, name) Type a_ ## name;
             COMMON_TYPES
@@ -52,6 +54,7 @@ void test_common_c_types(void) {
 
 
 void test_dumb_and_stupid_c_types(void) {
+    Initialize_Runtime_Reflection(NULL);
 
     // X(Type, name)
     //
@@ -150,6 +153,8 @@ void test_dumb_and_stupid_c_types(void) {
 
 
 void test_long_double_type(void) {
+    Initialize_Runtime_Reflection(NULL);
+
     { // this sounds reasonable, but is it?
         long double x = 235;
         f64 float_result = Type_As_Float(Reflect(long double), &x);
