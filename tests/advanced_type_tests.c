@@ -2,7 +2,48 @@
 #include "common.h"
 
 
-void test_advanced_types(void) {
+void test_array_runtime_reflection(void) {
+    typedef struct { s32 age; f32 height; } Faz;
+    {
+        Runtime_Reflection_Type *faz_type = Begin_New_Type(Faz);
+        faz_type->kind = RRTK_struct;
+        Add_Field(faz_type, Faz, s32, age);
+        Add_Field(faz_type, Faz, f32, height);
+    }
+
+
+    typedef Array(Faz) Faz_Array;
+    Make_New_Array_Type(Faz_Array, Faz);
+
+    Faz_Array array = ZEROED;
+
+    {
+        String sprinted;
+
+        sprinted = Generic_sprint(Faz_Array, &array);
+        printf("empty array: "S_Fmt"\n", S_Arg(sprinted));
+
+        Array_Append(&array, ((Faz){ .age = 40,  .height = 1.5 }));
+        Array_Append(&array, ((Faz){ .age = 52,  .height = 2.5 }));
+        Array_Append(&array, ((Faz){ .age = -12, .height = 3.5 }));
+        Array_Append(&array, ((Faz){ .age = 0,   .height = 0   }));
+
+        sprinted = Generic_sprint(Faz_Array, &array);
+        printf("filled array: "S_Fmt"\n", S_Arg(sprinted));
+    }
+
+    String_Builder sb = ZEROED;
+    Generic_serialize_packed_binary_format(&sb, Faz_Array, &array);
+
+    String packed_binary = String_Builder_To_String(&sb);
+    Faz_Array deserialized;
+    Generic_deserialize_packed_binary_format(packed_binary, Faz_Array, &deserialized);
+
+    TEST_EXPECT(Generic_deep_equal(Faz_Array, &array, &deserialized));
+}
+
+
+void test_all_advanced_types_at_once(void) {
     typedef struct {
         s32 bar;
         f64 baz;
@@ -44,6 +85,7 @@ void test_advanced_types(void) {
 
 
     Runtime_Reflection_Type *advanced_types_type = Begin_New_Type(Advanced_Types);
+    advanced_types_type->kind = RRTK_struct;
 
     Add_Field(advanced_types_type, Advanced_Types, String,      my_string);
     Add_Field(advanced_types_type, Advanced_Types, Int_Array,   int_array);

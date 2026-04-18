@@ -4,9 +4,9 @@
 // Author   - Fletcher M
 //
 // Created  - 11/04/26
-// Modified - 17/04/26
+// Modified - 18/04/26
 //
-// Version  - v0.0.7
+// Version  - v0.0.8
 //
 // Make sure to...
 //      #define RUNTIME_REFLECTION_IMPLEMENTATION
@@ -50,18 +50,22 @@ typedef enum {
     // when serialized, will just put the raw number.
     RRTK_void_pointer,
 
+    // a struct, has many fields
     RRTK_struct,
 
+    // Bested.h Array(), not a c array,
+    RRTK_array,
 
-    // type struct should have a "pointer to this type" in them.
-    // RRTK_pointer,
+
     // TODO pointer to things, maybe store the item? or just warn user that we dont do that.
     // or user decides weather to store item or something else, an index into other array?
+    //
+    // type struct should have a "pointer to this type" in them.
+    // RRTK_pointer,
 
 
-    // TODO Array of things, store entire array.
-    // TODO buffer of things, or maybe just the array?
-    // TODO static buffer of things. <- this one is useful,
+    // TODO static buffer of things.
+    // s32[42] - store the entire thing.
 
     // TODO union? store the entire bytes?
     // TODO tagged unions? not a real c type, but user could construct themselves?
@@ -118,6 +122,10 @@ struct Runtime_Reflection_Type {
 
     // if this is a struct, it has fields.
     Runtime_Reflection_Field_Array fields;
+
+
+    // if it is an array, what its item type is.
+    Runtime_Reflection_Type *array_item_type;
 };
 
 typedef Array(Runtime_Reflection_Type) Runtime_Reflection_Type_Array;
@@ -132,25 +140,41 @@ void Initialize_Runtime_Reflection(Arena *allocator);
 
 
 // to make a new struct, start by calling this with your type, then Add_Field()'s
+//
+// example:
+// ```
+//     Runtime_Reflection_Type *foo_type = Begin_New_Type(Foo);
+//     foo_type->kind = RRTK_struct;
+// ```
 #define Begin_New_Type(Type)      Begin_New_Type_Internal(S(#Type), sizeof(Type), Alignof(Type))
+
+Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_bytes, u64 alignment);
+
+
 
 // sorry this is 4 parameters, its gotta be this way
 #define Add_Field(struct_type_ptr, Struct_Type, Field_Type, field)      \
-    Add_Field_Internal(struct_type_ptr, S(#Field_Type), S(#field), offsetof(Struct_Type, field))
+    Add_Field_Internal(struct_type_ptr, S(#Field_Type), S(#field), offsetof(Struct_Type, field), Get_Source_Code_Location())
+
+void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_name, String field_name, u64 offset, Source_Code_Location caller_location);
 
 
-#define Make_New_Array_Type(Array_Type, Inner_Type) TODO("Make_New_Array_Type function");
 
+#define Make_New_Array_Type(Array_Type, Inner_Type)     \
+    Make_New_Array_Type_Internal(S(#Array_Type), Reflect(Inner_Type))
+
+void Make_New_Array_Type_Internal(String new_array_type_name, Runtime_Reflection_Type *item_type);
 
 
 // to use your reflected type get it here.
-#define Reflect(Type)   Get_Type_Reflection_By_Name(S(#Type))
+#define Reflect(Type)   Get_Type_Reflection_By_Name(S(#Type), Get_Source_Code_Location())
 
 // this function cannot return NULL, will panic.
-Runtime_Reflection_Type *Get_Type_Reflection_By_Name(String type_name);
+Runtime_Reflection_Type *Get_Type_Reflection_By_Name(String type_name, Source_Code_Location caller_location);
 
 // this function might return NULL.
 Runtime_Reflection_Type *Maybe_Get_Type_Reflection_By_Name(String type_name);
+
 
 // will panic if:
 //    1. the type passed in was not a struct.
@@ -178,6 +202,16 @@ u64 Type_As_Unsigned_Integer(Runtime_Reflection_Type *type, void *value);
 f64 Type_As_Float(Runtime_Reflection_Type *type, void *value);
 
 
+
+
+////////////////////////////////////////////////////////////////////
+//                     Generic Functions
+//
+//      uses the runtime type information to generically do
+//      things, such as printing struct, serializeing and
+//      deserializing things, checking if 2 objects are deeply
+//      equal.
+////////////////////////////////////////////////////////////////////
 
 typedef struct {
     // pass this allocator to the string builder,
@@ -246,14 +280,6 @@ bool Generic_deep_equal_by_type(Runtime_Reflection_Type *type, void *a, void *b)
 //       that scans a c file and makes the generate functions automatically.
 
 
-
-// internal stuff, use the macro versions of this stuff
-//
-// TODO maybe expose this to the user, so they can make types that dont exist?
-Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_bytes, u64 alignment);
-void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_name, String field_name, u64 offset);
-
-
 #endif // RUNTIME_REFLECTION_H
 
 
@@ -262,10 +288,6 @@ void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_
 
 
 #ifdef RUNTIME_REFLECTION_IMPLEMENTATION
-
-
-// for CHAR_MIN, to determine if char is signed or not.
-#include "limits.h"
 
 
 global_variable Runtime_Reflection_Type_Array runtime_reflection_type_array = ZEROED;
@@ -289,6 +311,7 @@ internal const char *RRTK_to_string(Runtime_Reflection_Type_Kind kind) {
     case RRTK_c_str:  return "c_str";
     case RRTK_void_pointer: return "void_pointer";
     case RRTK_struct: return "struct";
+    case RRTK_array:  return "array";
 
     default: return temp_sprintf("(Unknown{%d})", kind);
     }
@@ -296,8 +319,6 @@ internal const char *RRTK_to_string(Runtime_Reflection_Type_Kind kind) {
 
 
 
-
-internal void initialize_dumb_c_types(void);
 
 void Initialize_Runtime_Reflection(Arena *allocator) {
     if (runtime_reflection_has_been_initalized) {
@@ -363,83 +384,87 @@ void Initialize_Runtime_Reflection(Arena *allocator) {
         ADD_SIZED_BOOL(b64);
     }
 
-    Runtime_Reflection_Type type_string = { .kind = RRTK_string, .name = S("String"), .size_in_bytes = sizeof(String), .alignment = Alignof(String) };
-    Array_Append(&runtime_reflection_type_array, type_string);
+    { // strings
+        Runtime_Reflection_Type type_string = { .kind = RRTK_string, .name = S("String"), .size_in_bytes = sizeof(String), .alignment = Alignof(String) };
+        Array_Append(&runtime_reflection_type_array, type_string);
 
-    Runtime_Reflection_Type type_c_str = { .kind = RRTK_c_str, .name = S("const char *"), .size_in_bytes = sizeof(const char *), .alignment = Alignof(const char *) };
-    Array_Append(&runtime_reflection_type_array, type_c_str);
+        Runtime_Reflection_Type type_c_str = { .kind = RRTK_c_str, .name = S("const char *"), .size_in_bytes = sizeof(const char *), .alignment = Alignof(const char *) };
+        Array_Append(&runtime_reflection_type_array, type_c_str);
+    }
 
 
-
+    // the one and only void pointer.
+    // a pretty useless type in runtime reflection. 
     Runtime_Reflection_Type type_void_ptr = { .kind = RRTK_void_pointer, .name = S("void *"), .size_in_bytes = sizeof(void *), .alignment = Alignof(void *) };
     Array_Append(&runtime_reflection_type_array, type_void_ptr);
 
 
+    { // common arrays, aka the arrays Bested.h provides.
+        Make_New_Array_Type(Int_Array, s64);
+        Make_New_Array_Type(String_Array, String);
+    }
 
-    // add all the dumb c types after the good types.
-    initialize_dumb_c_types();
-}
 
-internal void initialize_dumb_c_types(void) {
+    { // add all the dumb c types after the good types.
+        // X(Type, is_integer);
+        #define DUMB_C_TYPES_X_MACRO            \
+            X(char                  , true)     \
+            X(signed char           , true)     \
+            X(unsigned char         , true)     \
+                                                \
+            X(short                 , true)     \
+            X(short int             , true)     \
+            X(signed short          , true)     \
+            X(signed short int      , true)     \
+                                                \
+            X(unsigned short        , true)     \
+            X(unsigned short int    , true)     \
+                                                \
+            X(int                   , true)     \
+            X(signed                , true)     \
+            X(signed int            , true)     \
+                                                \
+            X(unsigned              , true)     \
+            X(unsigned int          , true)     \
+                                                \
+            X(long                  , true)     \
+            X(long int              , true)     \
+            X(signed long           , true)     \
+            X(signed long int       , true)     \
+                                                \
+            X(unsigned long         , true)     \
+            X(unsigned long int     , true)     \
+                                                \
+            X(long long             , true)     \
+            X(long long int         , true)     \
+            X(signed long long      , true)     \
+            X(signed long long int  , true)     \
+                                                \
+            X(unsigned long long    , true)     \
+            X(unsigned long long int, true)     \
+                                                \
+            X(size_t                , true)     \
+            X(ssize_t               , true)     \
+            X(ptrdiff_t             , true)     \
+                                                \
+            X(float                 , false)    \
+            X(double                , false)    \
+            X(long double           , false) // did you know that this is a 128-bit float?
 
-    // X(Type, is_integer);
-    #define DUMB_C_TYPES_X_MACRO            \
-        X(char                  , true)     \
-        X(signed char           , true)     \
-        X(unsigned char         , true)     \
-                                            \
-        X(short                 , true)     \
-        X(short int             , true)     \
-        X(signed short          , true)     \
-        X(signed short int      , true)     \
-                                            \
-        X(unsigned short        , true)     \
-        X(unsigned short int    , true)     \
-                                            \
-        X(int                   , true)     \
-        X(signed                , true)     \
-        X(signed int            , true)     \
-                                            \
-        X(unsigned              , true)     \
-        X(unsigned int          , true)     \
-                                            \
-        X(long                  , true)     \
-        X(long int              , true)     \
-        X(signed long           , true)     \
-        X(signed long int       , true)     \
-                                            \
-        X(unsigned long         , true)     \
-        X(unsigned long int     , true)     \
-                                            \
-        X(long long             , true)     \
-        X(long long int         , true)     \
-        X(signed long long      , true)     \
-        X(signed long long int  , true)     \
-                                            \
-        X(unsigned long long    , true)     \
-        X(unsigned long long int, true)     \
-                                            \
-        X(size_t                , true)     \
-        X(ssize_t               , true)     \
-        X(ptrdiff_t             , true)     \
-                                            \
-        X(float                 , false)    \
-        X(double                , false)    \
-        X(long double           , false) // did you know that this is a 128-bit float?
+        #define X(Type, is_integer)                                 \
+            {                                                       \
+                Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1, true);     \
+                new_type->name                   = S(#Type);        \
+                new_type->kind                   = RRTK_number;     \
+                new_type->alignment              = Alignof(Type);   \
+                new_type->size_in_bytes          = sizeof(Type);    \
+                new_type->is_integer_type        = is_integer;      \
+                new_type->is_signed_integer_type = (is_integer) && TYPE_IS_SIGNED(Type);  \
+            }
 
-    #define X(Type, is_integer)                                 \
-        {                                                       \
-            Runtime_Reflection_Type *new_type = Array_Add(&runtime_reflection_type_array, 1, true);     \
-            new_type->name                   = S(#Type);        \
-            new_type->kind                   = RRTK_number;     \
-            new_type->alignment              = Alignof(Type);   \
-            new_type->size_in_bytes          = sizeof(Type);    \
-            new_type->is_integer_type        = is_integer;      \
-            new_type->is_signed_integer_type = (is_integer) && TYPE_IS_SIGNED(Type);  \
-        }
-
-        DUMB_C_TYPES_X_MACRO
-    #undef X
+            DUMB_C_TYPES_X_MACRO
+        #undef X
+    }
 }
 
 
@@ -463,13 +488,14 @@ Runtime_Reflection_Type *Maybe_Get_Type_Reflection_By_Name(String type_name) {
     }
     return NULL;
 }
-Runtime_Reflection_Type *Get_Type_Reflection_By_Name(String type_name) {
+Runtime_Reflection_Type *Get_Type_Reflection_By_Name(String type_name, Source_Code_Location caller_location) {
     assert_runtime_reflection_has_been_initalized();
 
     Runtime_Reflection_Type *type = Maybe_Get_Type_Reflection_By_Name(type_name);
     if (type != NULL) return type;
 
-    PANIC("no type with name '"S_Fmt"' found", S_Arg(type_name));
+    // this would be better with source code location.
+    PANIC(SCL_Fmt" no type with name '"S_Fmt"' found", SCL_Arg(caller_location), S_Arg(type_name));
 }
 
 
@@ -493,14 +519,14 @@ Runtime_Reflection_Type *Begin_New_Type_Internal(String type_name, u64 size_in_b
 
 
 
-void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_name, String field_name, u64 offset) {
+void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_name, String field_name, u64 offset, Source_Code_Location caller_location) {
     assert_runtime_reflection_has_been_initalized();
 
     if (struct_type->kind != RRTK_struct) {
         if (struct_type->kind == RRTK_NULL) {
-            PANIC("tried to add a field to something that has not set its kind yet, make sure to set the kind of '"S_Fmt"' to RRTK_struct before adding any fields.", S_Arg(struct_type->name));
+            PANIC(SCL_Fmt" tried to add a field to something that has not set its kind yet, make sure to set the kind of '"S_Fmt"' to RRTK_struct before adding any fields.", SCL_Arg(caller_location), S_Arg(struct_type->name));
         } else {
-            PANIC("tried to add a field to the '"S_Fmt"' type, which isn't a struct, was %s", S_Arg(struct_type->name), RRTK_to_string(struct_type->kind));
+            PANIC(SCL_Fmt" tried to add a field to the '"S_Fmt"' type, which isn't a struct, was %s", SCL_Arg(caller_location), S_Arg(struct_type->name), RRTK_to_string(struct_type->kind));
         }
     }
 
@@ -508,7 +534,7 @@ void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_
     Array_For_Each(Runtime_Reflection_Field, other_field, &struct_type->fields) {
         u64 index = other_field - struct_type->fields.items;
         if (String_Eq(other_field->name, field_name)) {
-            PANIC("tried to add a field with the same name as another field, ('"S_Fmt"' at index %zu)", S_Arg(other_field->name), index);
+            PANIC(SCL_Fmt" tried to add a field with the same name as another field, ('"S_Fmt"' at index %zu)", SCL_Arg(caller_location), S_Arg(other_field->name), index);
         }
     }
 
@@ -516,10 +542,25 @@ void Add_Field_Internal(Runtime_Reflection_Type *struct_type, String field_type_
 
     // user could be doing some funky stuff, allow it.
     field.name   = String_Duplicate(runtime_reflection_type_array.allocator, field_name);
-    field.type   = Get_Type_Reflection_By_Name(field_type_name);
+    field.type   = Get_Type_Reflection_By_Name(field_type_name, caller_location);
     field.offset = offset;
 
     Array_Append(&struct_type->fields, field);
+}
+
+void Make_New_Array_Type_Internal(String new_array_type_name, Runtime_Reflection_Type *item_type) {
+    assert_runtime_reflection_has_been_initalized();
+
+    // array types are structured like the Generic_Array,
+    // if this is not the case, your screwed.
+    Runtime_Reflection_Type *new_array_type = Begin_New_Type_Internal(new_array_type_name, sizeof(Generic_Array), Alignof(Generic_Array));
+    new_array_type->kind = RRTK_array;
+
+    new_array_type->array_item_type = item_type;
+
+    // @Think: should i add the generic array fields here?
+    //
+    // the user should just use the Generic_Array structure, its faster and better.
 }
 
 
@@ -587,6 +628,18 @@ f64 Type_As_Float(Runtime_Reflection_Type *type, void *value) {
 
 
 
+// will panic if something is wrong
+internal void check_generic_array_is_not_obviously_wrong(Runtime_Reflection_Type *array_type, void *array_ptr) {
+    Generic_Array *array = array_ptr;
+
+    (void) array_type;
+
+    // trying to prevent the case where a pointer is
+    // a low number, but not zero. probably could give a better error message.
+    if (array->count > 0 && array->items == NULL) PANIC("why is this array items pointer NULL?");
+}
+
+
 
 internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_Type *type, void *value) {
     assert_runtime_reflection_has_been_initalized();
@@ -651,15 +704,28 @@ internal void runtime_reflection_sprint(String_Builder *sb, Runtime_Reflection_T
         Array_For_Each(Runtime_Reflection_Field, field, &type->fields) {
             u64 index = field - type->fields.items;
 
-            if (index != 0) {
-                String_Builder_printf(sb, ", ");
-            }
+            if (index != 0) String_Builder_printf(sb, ", ");
 
             String_Builder_printf(sb, "."S_Fmt" = ", S_Arg(field->name));
             runtime_reflection_sprint(sb, field->type, value + field->offset);
         }
 
         String_Builder_printf(sb, " }");
+    } break;
+
+    case RRTK_array: {
+        check_generic_array_is_not_obviously_wrong(type, value);
+
+        Generic_Array *array = value;
+
+        String_Builder_printf(sb, "[ ");
+        for (u64 index = 0; index < array->count; index++) {
+            if (index != 0) String_Builder_printf(sb, ", ");
+
+            void *item_offset = array->items + index * type->array_item_type->size_in_bytes;
+            runtime_reflection_sprint(sb, type->array_item_type, item_offset);
+        }
+        String_Builder_printf(sb, " ]");
     } break;
 
     default: PANIC("Unknown Type Kind %s, ("S_Fmt")", RRTK_to_string(type->kind), S_Arg(type->name));
@@ -726,6 +792,22 @@ void Generic_serialize_packed_binary_format_by_type(String_Builder *sb, Runtime_
         }
     } break;
 
+    case RRTK_array: {
+        check_generic_array_is_not_obviously_wrong(type, value_ptr);
+
+        Generic_Array *array = value_ptr;
+
+        // just making sure this is a u64
+        u64 array_count = array->count;
+        // first put the size of the array, (kind of like a string)
+        String_Builder_Ptr_And_Size(sb, (void*) &array_count, sizeof(array_count));
+
+        for (u64 index = 0; index < array->count; index++) {
+            void *item_offset = array->items + index * type->array_item_type->size_in_bytes;
+            Generic_serialize_packed_binary_format_by_type(sb, type->array_item_type, item_offset);
+        }
+    } break;
+
     default: UNREACHABLE();
     }
 }
@@ -750,11 +832,11 @@ internal const char *Generic_deserialize_packed_binary_format_recur(String *inpu
     case RRTK_c_str: {
 
         if (input->length < sizeof(u64)) {
-            return temp_sprintf("Input is to small, wanted to parse %zu, only has %zu", type->size_in_bytes, input->length);
+            return temp_sprintf("Input is to small, wanted to parse %zu, only has %zu", sizeof(u64), input->length);
         }
 
         u64 string_length = *((u64*)input->data);
-        String_Advance(input, sizeof(string_length));
+        String_Advance(input, sizeof(u64));
 
         if (input->length < string_length) {
             return temp_sprintf("Input is to small to hold string of length %zu, was %zu", string_length, input->length);
@@ -780,6 +862,39 @@ internal const char *Generic_deserialize_packed_binary_format_recur(String *inpu
             void *output_value_ptr = output + field->offset;
             const char *result = Generic_deserialize_packed_binary_format_recur(input, field->type, output_value_ptr, allocator);
             if (result != NULL) return result;
+        }
+    } break;
+
+    case RRTK_array: {
+        // the output array should be zeroed by now
+        Generic_Array *output_array = output;
+        output_array->allocator = allocator;
+
+        if (input->length < sizeof(u64)) {
+            return temp_sprintf("Input is to small, wanted to parse %zu, only has %zu", sizeof(u64), input->length);
+        }
+
+        u64 array_count = *((u64*)input->data);
+        String_Advance(input, sizeof(u64));
+
+        // give output array enough space to contain the incoming items.
+        {
+            Array_Item_Type_Properties_Struct item_properties = {
+                .item_size = type->array_item_type->size_in_bytes,
+                .item_align = type->array_item_type->alignment,
+            };
+            // manually call this, doing the same thing as Array_Reserve
+            Array_Maybe_Grow(output_array, item_properties, array_count, true, Get_Source_Code_Location());
+        }
+
+        output_array->count = array_count;
+        for (u64 i = 0; i < array_count; i++) {
+            void *new_item_placement = output_array->items + i * type->array_item_type->size_in_bytes;
+
+            const char *err = Generic_deserialize_packed_binary_format_recur(input, type->array_item_type, new_item_placement, allocator);
+            if (err != NULL) {
+                return temp_sprintf("when parseing array '"S_Fmt"' index %zu, got error: %s", S_Arg(type->name), i, err);
+            }
         }
     } break;
 
@@ -866,6 +981,7 @@ u64 Generic_serialize_human_readable_by_type(String_Builder *sb, Runtime_Reflect
             case RRTK_c_str:        TODO("Generic_serialize: RRTK_c_str");
             case RRTK_void_pointer: TODO("Generic_serialize: RRTK_void_pointer");
             case RRTK_struct:       TODO("Generic_serialize: RRTK_struct");
+            case RRTK_array:        TODO("Generic_serialize: RRTK_array");
 
             default: UNREACHABLE();
         }
@@ -920,10 +1036,11 @@ const char *Generic_deserialize_human_readable_by_type(String input_data, Runtim
             } break;
 
             case RRTK_bool:         TODO("Generic_deserialize: RRTK_bool");
-            case RRTK_string:       TODO("Generic_serialize: RRTK_string");
+            case RRTK_string:       TODO("Generic_deserialize: RRTK_string");
             case RRTK_c_str:        TODO("Generic_deserialize: RRTK_c_str");
             case RRTK_void_pointer: TODO("Generic_deserialize: RRTK_void_pointer");
             case RRTK_struct:       TODO("Generic_deserialize: RRTK_struct");
+            case RRTK_array:        TODO("Generic_deserialize: RRTK_array");
 
             default: UNREACHABLE();
         }
@@ -979,6 +1096,23 @@ bool Generic_deep_equal_by_type(Runtime_Reflection_Type *type, void *a, void *b)
 
                 // short circuiting in action.
                 if (!Generic_deep_equal_by_type(field->type, field_a, field_b)) return false;
+            }
+            return true;
+        }
+
+        case RRTK_array: {
+            Generic_Array *array_a = a;
+            Generic_Array *array_b = b;
+
+            // check if the sizes are different, the fast path.
+            if (array_a->count != array_b->count) return false;
+
+            // checking item by item
+            for (size_t i = 0; i < array_a->count; i++) {
+                void *item_a = array_a->items + i * type->array_item_type->size_in_bytes;
+                void *item_b = array_b->items + i * type->array_item_type->size_in_bytes;
+
+                if (!Generic_deep_equal_by_type(type->array_item_type, item_a, item_b)) return false;
             }
             return true;
         }

@@ -24,7 +24,8 @@ int main(void) {
     }
 
     { // advanced tests
-        ADD_TEST(test_advanced_types,          .custom_name = "Advanced Types");
+        ADD_TEST(test_array_runtime_reflection, .run_without_sandbox = true);
+        ADD_TEST(test_all_advanced_types_at_once,          .custom_name = "Advanced Types");
     }
 
     { // Serialization and Deserialization
@@ -42,6 +43,7 @@ int main(void) {
 
     { // deep equal tests
         ADD_TEST(test_deep_equal_wont_care_about_junk_padding);
+        ADD_TEST(test_deep_equal_works_on_arrays_with_junk);
     }
 
 
